@@ -1,0 +1,38 @@
+# Credentials — ХЭЗЭЭ Ч commit хийхгүй
+.env
+
+# Том өгөгдлийн файлууд — R2-д хадгалагдсан
+public/tiles/
+public/topo.mbtiles
+public/topo_garmin.jnx
+map/
+
+# Кэш хавтас
+tile_cache/
+geojson_cache/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# Cloudflare / wrangler
+.wrangler/
+
+# Claude
+.claude/
+
+# Нэг удаагийн fix script-ууд
+fix_cors_layers.js
+fix_layers.js
+
+# Test зураг
+test_*.png
+tile_mn.png
+jnx_preview/
+
+# data/ хавтас (shapefile нь томтой, R2-д байна)
+data/
+
+# GeoJSON-ууд R2-д байгаа тул local copy commit хийх шаардлагагүй
+public/geojson/*.geojson
