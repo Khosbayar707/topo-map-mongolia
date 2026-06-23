@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Давхарга нэмэх — Admin</title>
+  <script>
+  function _loadScript(src) {
+    return new Promise((res, rej) => {
+      if (document.querySelector('script[src="' + src + '"]')) { res(); return; }
+      var s = document.createElement('script');
+      s.src = src; s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+  }
+  </script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #1a1a2e; color: #e0e0e0;
+      min-height: 100vh; display: flex; flex-direction: column;
+    }
+
+    header {
+      background: #16213e; border-bottom: 2px solid #0f3460;
+      padding: 10px 20px; display: flex; align-items: center; gap: 14px;
+    }
+    header h1 { font-size: 1rem; color: #e94560; font-weight: 700; }
+    header a {
+      margin-left: auto; color: #7a8a9a; font-size: 0.78rem;
+      text-decoration: none; padding: 4px 10px; border: 1px solid #1a3060;
+      border-radius: 4px;
+    }
+    header a:hover { color: #e0e0e0; border-color: #4a6a9a; }
+
+    .page { flex: 1; max-width: 520px; width: 100%; margin: 0 auto; padding: 32px 16px; }
+
+    /* ── Auth gate ── */
+    #auth-gate {
+      background: #12192e; border: 1px solid #1a3060; border-radius: 10px;
+      padding: 32px 28px; text-align: center;
+    }
+    .lock-icon { font-size: 2.5rem; margin-bottom: 12px; }
+    .auth-title { font-size: 1.05rem; font-weight: 600; color: #c0d0e0; margin-bottom: 6px; }
+    .auth-sub { font-size: 0.78rem; color: #7a8a9a; margin-bottom: 22px; }
+    .auth-input {
+      width: 100%; background: #0f2040; border: 1px solid #1a3060; color: #e0e0e0;
+      border-radius: 6px; padding: 10px 14px; font-size: 0.9rem; margin-bottom: 12px;
+      outline: none; transition: border-color .15s; text-align: center; letter-spacing: 3px;
+    }
+    .auth-input:focus { border-color: #e94560; }
+    .auth-btn {
+      width: 100%; background: #0f3460; border: 1px solid #e94560; color: #e0e0e0;
+      padding: 10px; border-radius: 6px; font-size: 0.9rem; cursor: pointer; transition: background .15s;
+    }
+    .auth-btn:hover { background: #e94560; }
+    .auth-err { color: #e94560; font-size: 0.78rem; margin-top: 10px; display: none; }
+
+    /* ── Upload UI ── */
+    #upload-ui { display: none; }
+
+    .section-card {
+      background: #12192e; border: 1px solid #1a3060; border-radius: 10px;
+      padding: 22px 20px; margin-bottom: 18px;
+    }
+    .section-title {
+      font-size: 0.72rem; color: #7a8a9a; text-transform: uppercase;
+      letter-spacing: .7px; margin-bottom: 14px;
+    }
+
+    .drop-zone {
+      border: 2px dashed #1a3a60; border-radius: 8px; padding: 28px 16px;
+      text-align: center; cursor: pointer; transition: all .15s; background: #0a1828;
+    }
+    .drop-zone:hover, .drop-zone.drag-over { border-color: #e94560; background: #1a0a18; }
+    .drop-zone input[type=file] { display: none; }
+    .drop-icon { font-size: 2rem; margin-bottom: 8px; }
+    .drop-text { font-size: 0.8rem; color: #7a8a9a; line-height: 1.6; }
+    .drop-text b { color: #c0d0e0; }
+    .drop-text small { font-size: 0.7rem; color: #4a6a8a; }
+
+    .field-row { margin-top: 14px; }
+    .field-label { font-size: 0.72rem; color: #7a8a9a; margin-bottom: 5px; }
+    .field-input {
+      width: 100%; background: #0f2040; border: 1px solid #1a3060; color: #e0e0e0;
+      border-radius: 6px; padding: 9px 12px; font-size: 0.85rem; outline: none;
+      transition: border-color .15s;
+    }
+    .field-input:focus { border-color: #e94560; }
+    .field-input::placeholder { color: #4a6a8a; }
+
+    .btn-primary {
+      width: 100%; margin-top: 14px; background: #0f3460; border: 1px solid #e94560;
+      color: #e0e0e0; padding: 10px; border-radius: 6px; font-size: 0.88rem;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-primary:hover:not(:disabled) { background: #e94560; }
+    .btn-primary:disabled { opacity: .4; cursor: default; }
+
+    .status-box {
+      margin-top: 12px; padding: 10px 12px; border-radius: 6px; font-size: 0.78rem;
+      display: none; line-height: 1.5;
+    }
+    .status-box.info { background: #0a1828; color: #7ab0d0; display: block; }
+    .status-box.ok   { background: #0a2010; color: #39d98a; display: block; }
+    .status-box.err  { background: #200a0a; color: #e94560; display: block; }
+
+    .progress-wrap { margin-top: 10px; display: none; }
+    .progress-track { height: 4px; background: #1a3060; border-radius: 2px; }
+    .progress-bar { height: 100%; background: #e94560; border-radius: 2px; width: 0%; transition: width .2s; }
+
+    /* Layer list */
+    .layer-row {
+      display: flex; align-items: center; gap: 10px; padding: 8px 0;
+      border-bottom: 1px solid #0a2040; font-size: 0.8rem;
+    }
+    .layer-row:last-child { border: none; }
+    .layer-dot { width: 8px; height: 8px; border-radius: 50%; background: #39d98a; flex-shrink: 0; }
+    .layer-name { flex: 1; }
+    .layer-file { font-size: 0.68rem; color: #4a6a8a; }
+    .btn-del {
+      background: none; border: 1px solid #3a1a1a; color: #e94560; border-radius: 4px;
+      padding: 2px 8px; font-size: 0.7rem; cursor: pointer; transition: background .15s;
+    }
+    .btn-del:hover { background: #3a1a1a; }
+    .empty-list { color: #4a6a8a; font-size: 0.78rem; padding: 6px 0; }
+
+    @media (max-width: 480px) {
+      .page { padding: 18px 10px; }
+      #auth-gate { padding: 24px 16px; }
+      .section-card { padding: 16px 14px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🗺 Admin — Давхарга удирдлага</h1>
+  </div>
+  <a href="/">← Газрын зураг</a>
+</header>
+
+<div class="page">
+
+  <!-- Auth gate -->
+  <div id="auth-gate">
+    <div class="lock-icon">🔒</div>
+    <div class="auth-title">Нууц үг оруулна уу</div>
+    <div class="auth-sub">Зөвхөн эрх бүхий хүмүүс davхарга нэмэх, устгах боломжтой</div>
+    <input type="password" id="auth-input" class="auth-input" placeholder="••••••••" autocomplete="current-password" />
+    <button class="auth-btn" id="auth-btn">Нэвтрэх</button>
+    <div class="auth-err" id="auth-err">Нууц үг буруу байна</div>
+  </div>
+
+  <!-- Upload UI (shown after auth) -->
+  <div id="upload-ui">
+
+    <!-- Upload section -->
+    <div class="section-card">
+      <div class="section-title">Шинэ давхарга нэмэх</div>
+
+      <div class="drop-zone" id="drop-zone">
+        <input type="file" id="shp-file-input" multiple accept=".shp,.dbf,.prj,.shx,.cpg" webkitdirectory />
+        <div class="drop-icon">📂</div>
+        <div class="drop-text">
+          <b>Shapefile фолдероо дуслуулах</b><br>
+          эсвэл дарж сонгох<br>
+          <small>.shp .dbf .prj .shx</small>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field-label">Давхаргын нэр</div>
+        <input type="text" id="layer-name" class="field-input" placeholder="Жишээ: Голын сүлжээ" />
+      </div>
+
+      <button class="btn-primary" id="btn-upload" disabled>Upload хийх</button>
+
+      <div class="status-box" id="status-box"></div>
+      <div class="progress-wrap" id="progress-wrap">
+        <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
+      </div>
+    </div>
+
+    <!-- Layer list section -->
+    <div class="section-card">
+      <div class="section-title">Одоогийн давхаргууд</div>
+      <div id="layer-list"><div class="empty-list">Ачааллаж байна...</div></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Нууц үг тохируулах (SHA-256 hash) ───────────────────────────────
+// Нууц үгийг өөрчлөхдөө: https://emn178.github.io/online-tools/sha256.html
+// Хийж авсан hash-г доор тавина уу
+// Анхдагч нууц үг: topo2024
+const PASSWORD_HASH = 'a2f442b2f0fe2fcb39c5be44e2a5c8fe688c1f6f1a7c73c6d99de98c62af3eb4';
+
+async function sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+// ── Auth ─────────────────────────────────────────────────────────────
+let authed = false;
+
+async function checkAuth() {
+  const val = document.getElementById('auth-input').value;
+  const hash = await sha256(val);
+  if (hash === PASSWORD_HASH) {
+    authed = true;
+    document.getElementById('auth-gate').style.display = 'none';
+    document.getElementById('upload-ui').style.display = 'block';
+    loadLayerList();
+  } else {
+    const err = document.getElementById('auth-err');
+    err.style.display = 'block';
+    document.getElementById('auth-input').value = '';
+    setTimeout(() => { err.style.display = 'none'; }, 2500);
+  }
+}
+
+document.getElementById('auth-btn').addEventListener('click', checkAuth);
+document.getElementById('auth-input').addEventListener('keydown', e => { if (e.key === 'Enter') checkAuth(); });
+
+// ── Status / progress helpers ─────────────────────────────────────────
+function setStatus(msg, type) {
+  const el = document.getElementById('status-box');
+  el.textContent = msg; el.className = 'status-box ' + type;
+}
+function setProgress(pct) {
+  const wrap = document.getElementById('progress-wrap');
+  wrap.style.display = pct >= 0 ? 'block' : 'none';
+  document.getElementById('progress-bar').style.width = pct + '%';
+}
+
+// ── File handling ─────────────────────────────────────────────────────
+const R2 = 'https://pub-2d7bdb113e09406eab77dc06705c4461.r2.dev';
+let pendingFiles = {};
+
+function handleFiles(files) {
+  pendingFiles = {};
+  let folderName = '';
+  for (const f of files) {
+    const ext = f.name.split('.').pop().toLowerCase();
+    if (['shp','dbf','prj','shx','cpg'].includes(ext)) pendingFiles[ext] = f;
+    if (!folderName && f.webkitRelativePath) folderName = f.webkitRelativePath.split('/')[0];
+    if (!folderName && ext === 'shp') folderName = f.name.replace(/\.shp$/i, '');
+  }
+  if (!pendingFiles.shp || !pendingFiles.dbf) {
+    setStatus('⚠ .shp болон .dbf файл заавал шаардлагатай', 'err');
+    document.getElementById('btn-upload').disabled = true;
+    return;
+  }
+  const inp = document.getElementById('layer-name');
+  if (!inp.value && folderName) inp.value = folderName;
+  setStatus(`✓ Фолдер: "${folderName}" — ${Object.keys(pendingFiles).length} файл бэлэн`, 'info');
+  document.getElementById('btn-upload').disabled = false;
+}
+
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('click', () => document.getElementById('shp-file-input').click());
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleFiles([...e.dataTransfer.files]); });
+document.getElementById('shp-file-input').addEventListener('change', e => handleFiles([...e.target.files]));
+
+// ── Upload ────────────────────────────────────────────────────────────
+document.getElementById('btn-upload').addEventListener('click', async () => {
+  const layerName = document.getElementById('layer-name').value.trim();
+  if (!layerName) { setStatus('Давхаргын нэр оруулна уу', 'err'); return; }
+  if (!pendingFiles.shp) { setStatus('Файл сонгоогүй байна', 'err'); return; }
+
+  document.getElementById('btn-upload').disabled = true;
+  setProgress(10); setStatus('Файл уншиж байна...', 'info');
+
+  try {
+    const readBuf = f => new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = e => res(e.target.result); r.onerror = rej;
+      r.readAsArrayBuffer(f);
+    });
+
+    const shpBuf = await readBuf(pendingFiles.shp);
+    const dbfBuf = await readBuf(pendingFiles.dbf);
+    const prjStr = pendingFiles.prj ? await pendingFiles.prj.text() : '';
+
+    setProgress(30); setStatus('GeoJSON болгон хөрвүүлж байна...', 'info');
+
+    await _loadScript('https://unpkg.com/shpjs@4.0.4/dist/shp.js');
+    await _loadScript('https://unpkg.com/proj4@2.9.0/dist/proj4.js');
+
+    if (typeof shp === 'undefined') throw new Error('shpjs CDN ачаалагдаагүй');
+    const geomFeatures = shp.parseShp(shpBuf, prjStr);
+    const attributes   = shp.parseDbf(dbfBuf);
+    const geojson      = shp.combine([geomFeatures, attributes]);
+
+    if (prjStr && typeof proj4 !== 'undefined' &&
+        !prjStr.includes('WGS_1984') && !prjStr.includes('WGS 1984') && !prjStr.includes('GCS_WGS_1984')) {
+      try {
+        const srcProj = proj4.Proj(prjStr);
+        const wgs84   = proj4.Proj('EPSG:4326');
+        geojson.features.forEach(f => {
+          if (!f.geometry) return;
+          function reproj(c) {
+            if (typeof c[0] === 'number') { const [lng,lat] = proj4.transform(srcProj,wgs84,[c[0],c[1]]); c[0]=lng; c[1]=lat; }
+            else c.forEach(reproj);
+          }
+          reproj(f.geometry.coordinates);
+        });
+      } catch {}
+    }
+
+    setProgress(65); setStatus(`${geojson.features.length} feature — R2-д хуулж байна...`, 'info');
+
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: layerName, geojson }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+    setProgress(100);
+    setStatus(`✅ "${layerName}" амжилттай нэмэгдлээ (${data.features} feature)`, 'ok');
+    pendingFiles = {};
+    document.getElementById('shp-file-input').value = '';
+    document.getElementById('layer-name').value = '';
+    setTimeout(() => setProgress(-1), 1500);
+    loadLayerList();
+
+  } catch (e) {
+    setProgress(-1);
+    setStatus('✗ Алдаа: ' + e.message, 'err');
+    document.getElementById('btn-upload').disabled = false;
+  }
+});
+
+// ── Layer list ────────────────────────────────────────────────────────
+async function loadLayerList() {
+  const el = document.getElementById('layer-list');
+  try {
+    const layers = await fetch(`${R2}/geojson/layers.json?t=${Date.now()}`).then(r => r.json());
+    if (!layers.length) { el.innerHTML = '<div class="empty-list">Давхарга байхгүй байна</div>'; return; }
+    el.innerHTML = layers.map((l, i) => `
+      <div class="layer-row">
+        <div class="layer-dot"></div>
+        <div class="layer-name">${l.name}<br><span class="layer-file">${l.file}</span></div>
+        <button class="btn-del" data-idx="${i}">Устгах</button>
+      </div>`).join('');
+    el.querySelectorAll('.btn-del').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const layer = layers[+btn.dataset.idx];
+        if (!confirm(`"${layer.name}" давхаргыг устгах уу?`)) return;
+        btn.disabled = true; btn.textContent = '...';
+        try {
+          await fetch('/api/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: layer.name, file: layer.file })
+          });
+          loadLayerList();
+        } catch { btn.disabled = false; btn.textContent = 'Устгах'; alert('Устгаж чадсангүй'); }
+      });
+    });
+  } catch {
+    el.innerHTML = '<div class="empty-list">Давхарга татаж чадсангүй</div>';
+  }
+}
+</script>
+</body>
+</html>

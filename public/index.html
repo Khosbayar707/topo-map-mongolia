@@ -2,88 +2,85 @@
 <html lang="mn">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Топографийн зураг</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- shpjs + proj4 нь upload хийх үед л lazily ачаалагдана -->
-  <script>
-  function _loadScript(src) {
-    return new Promise((res, rej) => {
-      if (document.querySelector('script[src="' + src + '"]')) { res(); return; }
-      var s = document.createElement('script');
-      s.src = src; s.onload = res; s.onerror = rej;
-      document.head.appendChild(s);
-    });
-  }
-  </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; background: #1a1a2e; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #1a1a2e; color: #e0e0e0; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 
+    /* ── Header ── */
     header {
       background: #16213e; border-bottom: 2px solid #0f3460;
-      padding: 8px 16px; display: flex; align-items: center; gap: 12px;
+      padding: 8px 14px; display: flex; align-items: center; gap: 10px;
       flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,.5); z-index: 1000;
     }
-    header h1 { font-size: 1.05rem; font-weight: 600; color: #e94560; }
-    .subtitle { font-size: 0.7rem; color: #7a8a9a; }
-    .hcontrols { display: flex; gap: 6px; margin-left: auto; align-items: center; }
+    header h1 { font-size: 1rem; font-weight: 600; color: #e94560; white-space: nowrap; }
+    .subtitle { font-size: 0.68rem; color: #7a8a9a; white-space: nowrap; }
+    .hcontrols { display: flex; gap: 6px; margin-left: auto; align-items: center; flex-shrink: 0; }
     .btn {
       background: #0f3460; border: 1px solid #e94560; color: #e0e0e0;
       padding: 5px 11px; border-radius: 4px; cursor: pointer; font-size: 0.76rem;
-      transition: background .15s; white-space: nowrap;
+      transition: background .15s; white-space: nowrap; user-select: none;
     }
     .btn:hover { background: #e94560; }
     .btn.active { background: #e94560; }
 
-    #main-wrap { flex: 1; display: flex; overflow: hidden; min-height: 0; }
-    #map-wrap { position: relative; flex: 1; overflow: hidden; }
-    #map { width: 100%; height: 100%; }
+    /* ── Main layout ── */
+    #main-wrap { flex: 1; display: flex; overflow: hidden; min-height: 0; position: relative; }
+    #map-wrap  { position: relative; flex: 1; overflow: hidden; }
+    #map       { width: 100%; height: 100%; }
 
+    /* ── Status bar ── */
     #statusbar {
       background: #0f1a30; border-top: 1px solid #0f3460;
       display: flex; align-items: center;
       height: 26px; flex-shrink: 0; font-size: 0.68rem; overflow: hidden;
     }
     .sb-item {
-      padding: 0 12px; border-right: 1px solid #1a3060;
+      padding: 0 10px; border-right: 1px solid #1a3060;
       display: flex; align-items: center; gap: 5px; height: 100%;
       white-space: nowrap; color: #8a9ab0;
     }
     .sb-item b { color: #c0d0e0; font-weight: 600; }
-    .sb-item.wide { flex: 1; }
+    .sb-item.wide { flex: 1; min-width: 0; overflow: hidden; }
     .sb-dot { width: 6px; height: 6px; border-radius: 50%; background: #e94560; flex-shrink: 0; }
 
+    /* ── Layer panel (desktop: right sidebar) ── */
     #layer-panel {
       width: 265px; background: #12192e; border-left: 1px solid #1a3060;
       display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden;
-      transition: width .2s; flex-shrink: 0;
+      transition: width .25s ease; flex-shrink: 0; z-index: 100;
     }
-    #layer-panel.collapsed { width: 0; border: none; }
+    #layer-panel.collapsed { width: 0; border: none; overflow: hidden; }
 
     .panel-title {
       padding: 10px 14px 9px; font-size: 0.8rem; color: #e94560; font-weight: 700;
       border-bottom: 1px solid #1a3060; background: #12192e;
       position: sticky; top: 0; z-index: 10; white-space: nowrap; letter-spacing: .3px;
+      display: flex; align-items: center; justify-content: space-between;
     }
+    .panel-close-btn {
+      display: none; background: none; border: none; color: #7a8a9a;
+      font-size: 1.1rem; cursor: pointer; padding: 0 2px; line-height: 1;
+    }
+
     .lsection { border-bottom: 1px solid #0a2040; padding-bottom: 8px; }
     .lsection-head {
       padding: 8px 14px 5px; font-size: 0.68rem; color: #7a8a9a;
       text-transform: uppercase; letter-spacing: .6px; white-space: nowrap;
     }
 
-    .basemap-grid {
-      display: grid; grid-template-columns: repeat(3, 1fr);
-      gap: 6px; padding: 0 10px 4px;
-    }
+    /* Base map grid */
+    .basemap-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 0 10px 4px; }
     .basemap-card {
       cursor: pointer; border-radius: 6px; overflow: hidden;
       border: 2px solid transparent; transition: border-color .15s; background: #0a2040;
     }
     .basemap-card.active { border-color: #e94560; }
     .basemap-card:hover:not(.active) { border-color: #4a6a9a; }
-    .basemap-thumb { width: 100%; height: 52px; display: block; }
+    .basemap-thumb { width: 100%; height: 48px; display: block; }
     .thumb-dark     { background: linear-gradient(135deg,#1a1a2e,#0f3460); }
     .thumb-osm      { background: linear-gradient(135deg,#b5d0a8,#e8e0c0); }
     .thumb-satellite{ background: linear-gradient(135deg,#1a3a1a,#2a5a2a,#1a2a40); }
@@ -91,18 +88,19 @@
     .thumb-light    { background: linear-gradient(135deg,#f5f5f0,#e8e8e0); }
     .thumb-terrain  { background: linear-gradient(135deg,#8fbc8f,#6b9b6b,#a0c8a0); }
     .basemap-label {
-      font-size: 0.65rem; text-align: center; padding: 3px 2px;
+      font-size: 0.63rem; text-align: center; padding: 3px 2px;
       color: #b0c0d0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
 
     .base-row { padding: 5px 14px; display: flex; align-items: center; gap: 8px; }
     .base-row input[type=checkbox] { accent-color: #e94560; cursor: pointer; flex-shrink: 0; }
-    .base-row label { font-size: 0.78rem; cursor: pointer; flex: 1; white-space: nowrap; }
+    .base-row label { font-size: 0.78rem; cursor: pointer; flex: 1; }
     .swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; border: 1px solid rgba(255,255,255,.15); }
     .slider-row { padding: 2px 14px 6px; display: flex; align-items: center; gap: 8px; }
     .slider-row span { font-size: 0.66rem; color: #7a8a9a; width: 26px; text-align: right; flex-shrink: 0; }
     .slider-row input[type=range] { flex: 1; accent-color: #e94560; cursor: pointer; }
 
+    /* Shapefile cards */
     .shp-card { border-bottom: 1px solid #0a2040; }
     .shp-card-head { padding: 7px 14px 5px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
     .shp-card-head:hover { background: rgba(255,255,255,.04); }
@@ -122,48 +120,7 @@
     .shp-status.err { color: #e94560; }
     .no-layers { padding: 10px 14px; font-size: 0.75rem; color: #7a8a9a; }
 
-    /* ── Upload zone ─────────────────────────────────── */
-    .upload-section { border-top: 1px solid #1a3060; padding: 10px; }
-    .upload-section-head {
-      padding: 4px 4px 8px; font-size: 0.68rem; color: #7a8a9a;
-      text-transform: uppercase; letter-spacing: .6px;
-    }
-    .drop-zone {
-      border: 2px dashed #1a3a60; border-radius: 8px; padding: 16px 10px;
-      text-align: center; cursor: pointer; transition: all .15s;
-      background: #0a1828;
-    }
-    .drop-zone:hover, .drop-zone.drag-over { border-color: #e94560; background: #1a0a18; }
-    .drop-zone input[type=file] { display: none; }
-    .drop-icon { font-size: 1.6rem; margin-bottom: 6px; }
-    .drop-text { font-size: 0.75rem; color: #7a8a9a; line-height: 1.5; }
-    .drop-text b { color: #c0d0e0; }
-    .drop-text small { color: #4a6a8a; font-size: 0.68rem; }
-
-    .upload-name-row { margin-top: 8px; display: flex; gap: 6px; }
-    .upload-name-row input[type=text] {
-      flex: 1; background: #0f2040; border: 1px solid #1a3060; color: #e0e0e0;
-      border-radius: 4px; padding: 5px 8px; font-size: 0.75rem;
-    }
-    .upload-name-row input::placeholder { color: #4a6a8a; }
-    .btn-upload {
-      background: #0f3460; border: 1px solid #e94560; color: #e0e0e0;
-      padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.74rem;
-      white-space: nowrap; transition: background .15s; flex-shrink: 0;
-    }
-    .btn-upload:hover:not(:disabled) { background: #e94560; }
-    .btn-upload:disabled { opacity: .4; cursor: default; }
-
-    .upload-status {
-      margin-top: 7px; font-size: 0.72rem; padding: 6px 8px;
-      border-radius: 4px; display: none;
-    }
-    .upload-status.info  { background: #0a1828; color: #7ab0d0; display: block; }
-    .upload-status.ok    { background: #0a2010; color: #39d98a; display: block; }
-    .upload-status.err   { background: #200a0a; color: #e94560; display: block; }
-    .upload-progress { height: 3px; background: #1a3060; border-radius: 2px; margin-top: 6px; display: none; }
-    .upload-progress-bar { height: 100%; background: #e94560; border-radius: 2px; width: 0%; transition: width .2s; }
-
+    /* Leaflet overrides */
     .leaflet-top.leaflet-left { top: 10px; left: 10px; }
     .leaflet-popup-content-wrapper { background: #16213e; border: 1px solid #0f3460; color: #e0e0e0; border-radius: 6px; }
     .leaflet-popup-tip { background: #16213e; }
@@ -172,6 +129,7 @@
     .popup-row { display: flex; gap: 6px; margin: 2px 0; }
     .popup-key { color: #7a8a9a; min-width: 70px; }
 
+    /* Loading */
     .loading-overlay {
       position: absolute; inset: 0; background: rgba(26,26,46,.85);
       display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2000;
@@ -179,6 +137,85 @@
     .spinner { width: 46px; height: 46px; border: 4px solid #0f3460; border-top-color: #e94560;
       border-radius: 50%; animation: spin .8s linear infinite; margin-bottom: 13px; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Mobile overlay backdrop ── */
+    #panel-backdrop {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 399;
+    }
+
+    /* ── Floating mobile toggle button ── */
+    #fab-layers {
+      display: none;
+      position: fixed; bottom: 22px; right: 16px; z-index: 600;
+      width: 50px; height: 50px; border-radius: 50%;
+      background: #e94560; border: none; color: #fff;
+      font-size: 1.3rem; cursor: pointer; align-items: center; justify-content: center;
+      box-shadow: 0 4px 14px rgba(0,0,0,.5); transition: transform .15s;
+    }
+    #fab-layers:active { transform: scale(.92); }
+
+    /* ── Mobile responsive (≤ 768px) ── */
+    @media (max-width: 768px) {
+      /* Compact header */
+      header { padding: 6px 10px; }
+      header h1 { font-size: 0.88rem; }
+      .subtitle { display: none; }
+      .btn { padding: 5px 9px; font-size: 0.72rem; }
+      /* Hide desktop layers button — FAB replaces it */
+      #btn-layers { display: none; }
+
+      /* Status bar: show only zoom + position */
+      #sb-size, #sb-bbox { display: none !important; }
+      #statusbar { height: 24px; font-size: 0.65rem; }
+      .sb-item { padding: 0 8px; }
+
+      /* Panel becomes bottom drawer */
+      #layer-panel {
+        position: fixed !important;
+        bottom: 0; left: 0; right: 0;
+        width: 100% !important;
+        height: 68vh;
+        max-height: 85vh;
+        border-left: none !important;
+        border-top: 2px solid #e94560;
+        border-radius: 16px 16px 0 0;
+        transform: translateY(100%);
+        transition: transform .3s cubic-bezier(.25,.8,.25,1);
+        overflow-y: auto;
+        z-index: 400;
+      }
+      #layer-panel.mobile-open {
+        transform: translateY(0);
+      }
+      /* collapsed class does nothing on mobile — use mobile-open instead */
+      #layer-panel.collapsed { width: 100% !important; overflow: auto; }
+
+      /* Show close button inside panel */
+      .panel-close-btn { display: block; }
+
+      /* Drawer handle at top */
+      .panel-title::before {
+        content: ''; position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+        width: 36px; height: 4px; border-radius: 2px; background: #2a4a6a;
+      }
+      .panel-title { position: relative; padding-top: 16px; }
+
+      /* FAB visible */
+      #fab-layers { display: flex; }
+
+      /* Backdrop visible when panel open */
+      #panel-backdrop.visible { display: block; }
+
+      /* Larger touch targets */
+      .shp-card-head { padding: 10px 14px; }
+      .basemap-card .basemap-thumb { height: 44px; }
+    }
+
+    @media (max-width: 480px) {
+      header h1 { font-size: 0.8rem; }
+      .btn { padding: 4px 7px; font-size: 0.69rem; }
+      #layer-panel { height: 72vh; }
+    }
   </style>
 </head>
 <body>
@@ -186,101 +223,89 @@
 <header>
   <div>
     <h1>Топографийн зураг</h1>
-    <div class="subtitle">1:200,000 масштаб • Монгол улс болон хил орчмын бүс</div>
+    <div class="subtitle">1:200,000 масштаб • Монгол улс</div>
   </div>
   <div class="hcontrols">
-    <button class="btn active" id="btn-topo">Топо зураг</button>
-    <button class="btn" id="btn-fit">Бүтэн харах</button>
+    <button class="btn active" id="btn-topo">Топо</button>
+    <button class="btn" id="btn-fit">Бүтэн</button>
     <button class="btn" id="btn-layers">☰ Давхаргууд</button>
   </div>
 </header>
 
 <div id="main-wrap">
-<div id="map-wrap">
-  <div id="map"></div>
-  <div class="loading-overlay" id="loading">
-    <div class="spinner"></div>
-    <div style="font-size:.85rem">Зургийг ачааллаж байна...</div>
+  <div id="map-wrap">
+    <div id="map"></div>
+    <div class="loading-overlay" id="loading">
+      <div class="spinner"></div>
+      <div style="font-size:.85rem">Зургийг ачааллаж байна...</div>
+    </div>
+  </div>
+
+  <div id="layer-panel">
+    <div class="panel-title">
+      ☰ Давхаргууд
+      <button class="panel-close-btn" id="btn-panel-close" title="Хаах">✕</button>
+    </div>
+
+    <div class="lsection">
+      <div class="lsection-head">Суурь газрын зураг</div>
+      <div class="basemap-grid" id="basemap-grid">
+        <div class="basemap-card active" data-id="dark">
+          <div class="basemap-thumb thumb-dark"></div>
+          <div class="basemap-label">Харанхуй</div>
+        </div>
+        <div class="basemap-card" data-id="osm">
+          <div class="basemap-thumb thumb-osm"></div>
+          <div class="basemap-label">OpenStreetMap</div>
+        </div>
+        <div class="basemap-card" data-id="satellite">
+          <div class="basemap-thumb thumb-satellite"></div>
+          <div class="basemap-label">Хиймэл дагуул</div>
+        </div>
+        <div class="basemap-card" data-id="topo">
+          <div class="basemap-thumb thumb-topo"></div>
+          <div class="basemap-label">OpenTopoMap</div>
+        </div>
+        <div class="basemap-card" data-id="light">
+          <div class="basemap-thumb thumb-light"></div>
+          <div class="basemap-label">Цайвар</div>
+        </div>
+        <div class="basemap-card" data-id="terrain">
+          <div class="basemap-thumb thumb-terrain"></div>
+          <div class="basemap-label">Гадарга</div>
+        </div>
+      </div>
+      <div class="slider-row" style="padding-top:6px">
+        <span id="base-op-val">30</span>
+        <input type="range" id="opacity-base" min="0" max="100" value="30" />
+      </div>
+    </div>
+
+    <div class="lsection">
+      <div class="lsection-head">Топографийн зураг (overlay)</div>
+      <div class="base-row">
+        <input type="checkbox" id="chk-topo" checked />
+        <div class="swatch" style="background:#c8a86b"></div>
+        <label for="chk-topo">Топографийн зураг 1:200,000</label>
+      </div>
+      <div class="slider-row">
+        <span id="topo-op-val">100</span>
+        <input type="range" id="opacity-topo" min="0" max="100" value="100" />
+      </div>
+    </div>
+
+    <div class="lsection">
+      <div class="lsection-head">Shapefile давхаргууд</div>
+      <div id="shp-list"></div>
+    </div>
   </div>
 </div>
 
-<div id="layer-panel">
-  <div class="panel-title">☰ Давхаргууд</div>
+<!-- Mobile backdrop -->
+<div id="panel-backdrop"></div>
 
-  <div class="lsection">
-    <div class="lsection-head">Суурь газрын зураг</div>
-    <div class="basemap-grid" id="basemap-grid">
-      <div class="basemap-card active" data-id="dark">
-        <div class="basemap-thumb thumb-dark"></div>
-        <div class="basemap-label">Харанхуй</div>
-      </div>
-      <div class="basemap-card" data-id="osm">
-        <div class="basemap-thumb thumb-osm"></div>
-        <div class="basemap-label">OpenStreetMap</div>
-      </div>
-      <div class="basemap-card" data-id="satellite">
-        <div class="basemap-thumb thumb-satellite"></div>
-        <div class="basemap-label">Хиймэл дагуул</div>
-      </div>
-      <div class="basemap-card" data-id="topo">
-        <div class="basemap-thumb thumb-topo"></div>
-        <div class="basemap-label">OpenTopoMap</div>
-      </div>
-      <div class="basemap-card" data-id="light">
-        <div class="basemap-thumb thumb-light"></div>
-        <div class="basemap-label">Цайвар</div>
-      </div>
-      <div class="basemap-card" data-id="terrain">
-        <div class="basemap-thumb thumb-terrain"></div>
-        <div class="basemap-label">Газрын гадарга</div>
-      </div>
-    </div>
-    <div class="slider-row" style="padding-top:6px">
-      <span id="base-op-val">30</span>
-      <input type="range" id="opacity-base" min="0" max="100" value="30" />
-    </div>
-  </div>
-
-  <div class="lsection">
-    <div class="lsection-head">Топографийн зураг (overlay)</div>
-    <div class="base-row">
-      <input type="checkbox" id="chk-topo" checked />
-      <div class="swatch" style="background:#c8a86b"></div>
-      <label for="chk-topo">Топографийн зураг 1:200,000</label>
-    </div>
-    <div class="slider-row">
-      <span id="topo-op-val">100</span>
-      <input type="range" id="opacity-topo" min="0" max="100" value="100" />
-    </div>
-  </div>
-
-  <div class="lsection">
-    <div class="lsection-head">Shapefile давхаргууд</div>
-    <div id="shp-list"></div>
-  </div>
-
-  <div class="upload-section">
-    <div class="upload-section-head">Шинэ давхарга нэмэх</div>
-    <div class="drop-zone" id="drop-zone">
-      <input type="file" id="shp-file-input" multiple accept=".shp,.dbf,.prj,.shx,.cpg" webkitdirectory />
-      <div class="drop-icon">📂</div>
-      <div class="drop-text">
-        <b>Shapefile фолдероо дуслуулах</b><br>
-        эсвэл дарж сонгох<br>
-        <small>Фолдерын нэр = давхаргын нэр</small>
-      </div>
-    </div>
-    <div class="upload-name-row">
-      <input type="text" id="layer-name-input" placeholder="Давхаргын нэр..." />
-      <button class="btn-upload" id="btn-do-upload" disabled>Upload</button>
-    </div>
-    <div class="upload-status" id="upload-status"></div>
-    <div class="upload-progress" id="upload-progress">
-      <div class="upload-progress-bar" id="upload-progress-bar"></div>
-    </div>
-  </div>
-</div>
-</div>
+<!-- Mobile FAB -->
+<button id="fab-layers" title="Давхаргууд">☰</button>
 
 <div id="statusbar">
   <div class="sb-item"><div class="sb-dot"></div>Zoom <b id="sb-zoom">—</b></div>
@@ -290,7 +315,6 @@
 </div>
 
 <script>
-// ── Config ────────────────────────────────────────────────────────────
 const R2 = 'https://pub-2d7bdb113e09406eab77dc06705c4461.r2.dev';
 
 const BASEMAPS = {
@@ -303,23 +327,57 @@ const BASEMAPS = {
 };
 
 // ── Map ───────────────────────────────────────────────────────────────
-const map = L.map('map', { center:[47,104], zoom:8, minZoom:6, maxZoom:11, zoomControl:true });
+const map = L.map('map', { center:[47,104], zoom:6, minZoom:6, maxZoom:11, zoomControl:true });
 
 let currentBaseId = 'dark';
 let currentBaseLayer = L.tileLayer(BASEMAPS.dark.url, { ...BASEMAPS.dark.opts, opacity:0.3 }).addTo(map);
 
-// Топо зураг — R2-с шууд (TMS y convention)
 const topoLayer = L.tileLayer(`${R2}/tiles/{z}/{x}/{y}.png`, {
   attribution: 'Топографийн зураг 1:200,000',
-  maxNativeZoom: 11, maxZoom: 11, opacity: 1.0,
-  tms: true,
+  maxNativeZoom: 11, maxZoom: 11, opacity: 1.0, tms: true,
   errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
 }).addTo(map);
 
-// ── Panel toggle ──────────────────────────────────────────────────────
-document.getElementById('btn-layers').addEventListener('click', () => {
-  document.getElementById('layer-panel').classList.toggle('collapsed');
-});
+// ── Panel toggle (desktop + mobile) ──────────────────────────────────
+const panel    = document.getElementById('layer-panel');
+const backdrop = document.getElementById('panel-backdrop');
+const isMobile = () => window.innerWidth <= 768;
+
+function openPanel() {
+  if (isMobile()) {
+    panel.classList.add('mobile-open');
+    backdrop.classList.add('visible');
+  } else {
+    panel.classList.remove('collapsed');
+  }
+}
+function closePanel() {
+  if (isMobile()) {
+    panel.classList.remove('mobile-open');
+    backdrop.classList.remove('visible');
+  } else {
+    panel.classList.add('collapsed');
+  }
+}
+function togglePanel() {
+  if (isMobile()) {
+    panel.classList.contains('mobile-open') ? closePanel() : openPanel();
+  } else {
+    panel.classList.toggle('collapsed');
+  }
+}
+
+document.getElementById('btn-layers').addEventListener('click', togglePanel);
+document.getElementById('fab-layers').addEventListener('click', openPanel);
+document.getElementById('btn-panel-close').addEventListener('click', closePanel);
+backdrop.addEventListener('click', closePanel);
+
+// Touch swipe-down to close drawer
+let touchStartY = 0;
+panel.addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; }, { passive: true });
+panel.addEventListener('touchend', e => {
+  if (e.changedTouches[0].clientY - touchStartY > 60) closePanel();
+}, { passive: true });
 
 // ── Base map switcher ─────────────────────────────────────────────────
 function switchBase(id) {
@@ -359,10 +417,9 @@ document.getElementById('btn-fit').addEventListener('click', () => {
   map.fitBounds([[INFO.south, INFO.west],[INFO.north, INFO.east]], { maxZoom:8, animate:false, padding:[10,10] });
 });
 
-// ── Default colors ────────────────────────────────────────────────────
+// ── Popup ─────────────────────────────────────────────────────────────
 const COLORS = ['#e94560','#00d4ff','#39d98a','#ffb800','#b47fff','#ff6b35','#00e5c0','#ff4dff'];
 
-// ── Popup ─────────────────────────────────────────────────────────────
 function makePopup(feature, layerName) {
   const p = feature.properties || {};
   const title = p.NAME || p.name || p.ADM1_MN || p.ADM1_EN || p.ADM2_MN || p.ADM2_EN || layerName;
@@ -374,7 +431,6 @@ function makePopup(feature, layerName) {
   return `<div class="popup-title">${title}</div>${rows || '<em style="color:#7a8a9a">Мэдээлэл алга</em>'}`;
 }
 
-// ── Layer builder ─────────────────────────────────────────────────────
 function buildLeafletLayer(geojson, style, layerName) {
   return L.geoJSON(geojson, {
     style: () => ({
@@ -394,19 +450,16 @@ function buildLeafletLayer(geojson, style, layerName) {
   });
 }
 
-// ── Shapefile layers — R2-с татна ─────────────────────────────────────
-let _shpLeafletLayers = [];  // map дээрх давхаргуудыг хянана
+// ── Shapefile layers ──────────────────────────────────────────────────
+let _shpLeafletLayers = [];
 
 async function loadShapefileLayers() {
   const list = document.getElementById('shp-list');
-
-  // Өмнөх map давхаргуудыг арилгана
   _shpLeafletLayers.forEach(l => { try { map.removeLayer(l); } catch {} });
   _shpLeafletLayers = [];
 
   let layers;
   try {
-    // cache-bust: browser-ын хуучин кэшийг тойрч шинэ layers.json авна
     layers = await fetch(`${R2}/geojson/layers.json?t=${Date.now()}`).then(r => r.json());
   } catch {
     list.innerHTML = '<div class="no-layers">Давхарга татаж чадсангүй</div>';
@@ -416,7 +469,7 @@ async function loadShapefileLayers() {
   list.innerHTML = '';
 
   layers.forEach(({ name, file, ready }, idx) => {
-    const id = `shp${idx}`;
+    const id    = `shp${idx}`;
     const color = COLORS[idx % COLORS.length];
     const style = { strokeColor: color, strokeWidth: 2, strokeOpacity: 90, fillColor: color, fillOpacity: 15, dash: 'solid' };
 
@@ -493,7 +546,6 @@ async function loadShapefileLayers() {
       else { if (leafletLayer) map.removeLayer(leafletLayer); }
     });
 
-    // layer.file — layers.json-д хадгалагдсан ASCII-safe filename ашиглана
     const geoUrl = `${R2}/geojson/${encodeURIComponent(file || name + '.geojson')}`;
     fetch(geoUrl)
       .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
@@ -507,147 +559,12 @@ async function loadShapefileLayers() {
 
 // ── Map events ────────────────────────────────────────────────────────
 map.on('mousemove', e => {
-  document.getElementById('sb-pos').textContent = `${e.latlng.lat.toFixed(4)}°N, ${e.latlng.lng.toFixed(4)}°E`;
+  document.getElementById('sb-pos').textContent = `${e.latlng.lat.toFixed(4)}°N  ${e.latlng.lng.toFixed(4)}°E`;
 });
 function updateZoom() { document.getElementById('sb-zoom').textContent = map.getZoom(); }
 map.on('zoomend', updateZoom);
 updateZoom();
 L.control.scale({ imperial:false, position:'bottomleft' }).addTo(map);
-
-// ── Shapefile Upload ──────────────────────────────────────────────────
-const UPLOAD_URL = '/api/upload';
-let pendingFiles = {};
-
-function setStatus(msg, type = 'info') {
-  const el = document.getElementById('upload-status');
-  el.textContent = msg; el.className = `upload-status ${type}`;
-}
-function setProgress(pct) {
-  const bar = document.getElementById('upload-progress');
-  bar.style.display = pct >= 0 ? 'block' : 'none';
-  document.getElementById('upload-progress-bar').style.width = pct + '%';
-}
-
-function handleFiles(files) {
-  pendingFiles = {};
-  let folderName = '';
-  for (const f of files) {
-    const ext = f.name.split('.').pop().toLowerCase();
-    if (['shp','dbf','prj','shx','cpg'].includes(ext)) pendingFiles[ext] = f;
-    // Фолдерын нэрийг webkitRelativePath-аас авна: "FolderName/file.shp" → "FolderName"
-    if (!folderName && f.webkitRelativePath) {
-      folderName = f.webkitRelativePath.split('/')[0];
-    }
-    // Drag & drop буюу flat файл сонгосон үед fallback
-    if (!folderName && ext === 'shp') folderName = f.name.replace(/\.shp$/i, '');
-  }
-  if (!pendingFiles.shp || !pendingFiles.dbf) {
-    setStatus('⚠ .shp болон .dbf файл заавал шаардлагатай', 'err');
-    document.getElementById('btn-do-upload').disabled = true;
-    return;
-  }
-  const nameInput = document.getElementById('layer-name-input');
-  if (!nameInput.value && folderName) nameInput.value = folderName;
-  setStatus(`✓ Фолдер: "${folderName}" — ${Object.keys(pendingFiles).length} файл бэлэн. Upload дарна уу.`, 'info');
-  document.getElementById('btn-do-upload').disabled = false;
-}
-
-// Drag & drop
-const dropZone = document.getElementById('drop-zone');
-dropZone.addEventListener('click', () => document.getElementById('shp-file-input').click());
-dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-dropZone.addEventListener('drop', e => {
-  e.preventDefault(); dropZone.classList.remove('drag-over');
-  handleFiles([...e.dataTransfer.files]);
-});
-document.getElementById('shp-file-input').addEventListener('change', e => handleFiles([...e.target.files]));
-
-// Upload button
-document.getElementById('btn-do-upload').addEventListener('click', async () => {
-  const layerName = document.getElementById('layer-name-input').value.trim();
-  if (!layerName) { setStatus('Давхаргын нэр оруулна уу', 'err'); return; }
-  if (!pendingFiles.shp) { setStatus('Файл сонгоогүй байна', 'err'); return; }
-
-  document.getElementById('btn-do-upload').disabled = true;
-  setProgress(10); setStatus('Файл уншиж байна...', 'info');
-
-  try {
-    // Read file buffers
-    const readBuf = f => new Promise((res, rej) => {
-      const r = new FileReader();
-      r.onload  = e => res(e.target.result);
-      r.onerror = rej;
-      r.readAsArrayBuffer(f);
-    });
-
-    const shpBuf = await readBuf(pendingFiles.shp);
-    const dbfBuf = await readBuf(pendingFiles.dbf);
-    const prjStr = pendingFiles.prj ? await pendingFiles.prj.text() : '';
-
-    setProgress(30); setStatus('GeoJSON болгон хөрвүүлж байна...', 'info');
-
-    // shpjs + proj4 — хэрэгтэй үед л ачаална
-    await _loadScript('https://unpkg.com/shpjs@4.0.4/dist/shp.js');
-    await _loadScript('https://unpkg.com/proj4@2.9.0/dist/proj4.js');
-
-    // Parse with shpjs
-    if (typeof shp === 'undefined') throw new Error('shpjs CDN ачаалагдаагүй байна');
-    const geomFeatures = shp.parseShp(shpBuf, prjStr);
-    const attributes   = shp.parseDbf(dbfBuf);
-    const geojson      = shp.combine([geomFeatures, attributes]);
-
-    // Detect & reproject if not WGS84
-    if (prjStr && typeof proj4 !== 'undefined' &&
-        !prjStr.includes('WGS_1984') && !prjStr.includes('WGS 1984') &&
-        !prjStr.includes('GCS_WGS_1984')) {
-      setStatus('Координат хөрвүүлж байна (proj4)...', 'info');
-      try {
-        const srcProj = proj4.Proj(prjStr);
-        const wgs84   = proj4.Proj('EPSG:4326');
-        geojson.features.forEach(f => {
-          if (!f.geometry) return;
-          const coords = f.geometry.coordinates;
-          function reproject(c) {
-            if (typeof c[0] === 'number') {
-              const [lng, lat] = proj4.transform(srcProj, wgs84, [c[0], c[1]]);
-              c[0] = lng; c[1] = lat;
-            } else c.forEach(reproject);
-          }
-          reproject(coords);
-        });
-      } catch { /* CRS parse failed, use as-is */ }
-    }
-
-    setProgress(60); setStatus(`${geojson.features.length} feature — сервер рүү илгээж байна...`, 'info');
-
-    // POST to Pages Function
-    const res = await fetch(UPLOAD_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: layerName, geojson }),
-    });
-
-    setProgress(90);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-
-    setProgress(100);
-    setStatus(`✅ "${layerName}" амжилттай нэмэгдлээ (${data.features} feature) — хуудсыг refresh хийнэ үү`, 'ok');
-    pendingFiles = {};
-    document.getElementById('shp-file-input').value = '';
-    document.getElementById('layer-name-input').value = '';
-    setTimeout(() => setProgress(-1), 1500);
-
-    // Reload layers without full page refresh
-    setTimeout(loadShapefileLayers, 800);
-
-  } catch (e) {
-    setProgress(-1);
-    setStatus('✗ Алдаа: ' + e.message, 'err');
-    document.getElementById('btn-do-upload').disabled = false;
-  }
-});
 
 // ── Init ──────────────────────────────────────────────────────────────
 document.getElementById('sb-imgsize').textContent = `${INFO.width.toLocaleString()} × ${INFO.height.toLocaleString()} px`;
