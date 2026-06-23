@@ -1,6 +1,8 @@
 name = "topo-map"
 compatibility_date = "2024-01-01"
 pages_build_output_dir = "deploy"
+# Cloudflare Pages production branch
+# Deploy: wrangler pages deploy deploy --project-name topo-map --branch main
 
 [[r2_buckets]]
 binding = "BUCKET"
