@@ -198,7 +198,7 @@
 // Нууц үгийг өөрчлөхдөө: https://emn178.github.io/online-tools/sha256.html
 // Хийж авсан hash-г доор тавина уу
 // Анхдагч нууц үг: topo2024
-const PASSWORD_HASH = 'a2f442b2f0fe2fcb39c5be44e2a5c8fe688c1f6f1a7c73c6d99de98c62af3eb4';
+const PASSWORD_HASH = 'f7b56bb4c97a3f962c5db0ba2b76d2939cf11df2da9c3e085fc9ad6d05d878c0';
 
 async function sha256(str) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
