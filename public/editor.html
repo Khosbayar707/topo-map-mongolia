@@ -888,20 +888,35 @@ async function captureMap(PX){
     }
   }
 
-  // 3. Permanent labels (tooltips)
-  mapEl.querySelectorAll('.leaflet-tooltip').forEach(tt=>{
-    const r=tt.getBoundingClientRect();
-    if(r.width===0) return;
-    const tx=r.left-mapRect.left, ty=r.top-mapRect.top;
-    const text=tt.textContent.trim();
-    if(!text) return;
-    ctx.font='10px sans-serif';
-    const tw=ctx.measureText(text).width;
-    ctx.fillStyle='rgba(255,255,255,0.85)';
-    ctx.fillRect(tx-2, ty-1, tw+6, r.height+2);
-    ctx.fillStyle='#222';
-    ctx.textAlign='left';
-    ctx.fillText(text, tx+1, ty+r.height-3);
+  // 3. Labels — project from geographic centroid using Leaflet's own projection
+  ctx.font='10px sans-serif';
+  layers.filter(l=>l.visible&&l.labelField&&l.geojson).forEach(lyr=>{
+    lyr.geojson.features.forEach(f=>{
+      const val=f.properties[lyr.labelField];
+      if(val==null||val==='') return;
+      const text=String(val);
+      // Compute centroid of outer ring vertices
+      try{
+        let ring;
+        const gt=f.geometry.type;
+        if(gt==='Polygon') ring=f.geometry.coordinates[0];
+        else if(gt==='MultiPolygon') ring=f.geometry.coordinates[0][0];
+        else if(gt==='LineString') ring=f.geometry.coordinates;
+        else if(gt==='MultiLineString') ring=f.geometry.coordinates[0];
+        else ring=[f.geometry.coordinates]; // Point
+        let sumLng=0,sumLat=0;
+        ring.forEach(p=>{sumLng+=p[0];sumLat+=p[1];});
+        const latlng=[sumLat/ring.length, sumLng/ring.length];
+        const pt=map.latLngToContainerPoint(latlng);
+        if(pt.x<0||pt.y<0||pt.x>w||pt.y>h) return;
+        const tw=ctx.measureText(text).width;
+        ctx.fillStyle='rgba(255,255,255,0.82)';
+        ctx.fillRect(pt.x-tw/2-3, pt.y-8, tw+6, 13);
+        ctx.fillStyle='#111';
+        ctx.textAlign='center';
+        ctx.fillText(text, pt.x, pt.y+3);
+      }catch(e){}
+    });
   });
 
   ctx.restore();
