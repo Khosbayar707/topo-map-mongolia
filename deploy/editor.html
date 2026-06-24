@@ -851,39 +851,37 @@ async function captureMap(){
   // 3. Title bar (drawn on canvas — avoids Cyrillic encoding issues in PDF)
   const title=document.getElementById('map-title').value||'';
   if(title){
-    ctx.font='bold 14px Montserrat,sans-serif';
+    ctx.font='bold 13px sans-serif';
     const tw=ctx.measureText(title).width+24;
     const tx=(w-tw)/2, ty=8;
-    ctx.fillStyle='rgba(0,0,0,0.6)';
-    ctx.beginPath();
-    ctx.roundRect(tx,ty,tw,26,4);
-    ctx.fill();
+    ctx.fillStyle='rgba(0,0,0,0.65)';
+    ctx.fillRect(tx,ty,tw,24);
     ctx.fillStyle='#e6edf3';
     ctx.textAlign='center';
-    ctx.fillText(title, w/2, ty+18);
+    ctx.fillText(title, w/2, ty+16);
   }
 
-  // 4. Legend (bottom-right)
-  const legRows=document.querySelectorAll('#legend-rows .leg-row');
-  if(legRows.length){
-    const pad=8, rowH=16, boxW=110;
-    const lx=w-boxW-10, ly=h-legRows.length*rowH-pad*2-24;
-    ctx.fillStyle='rgba(0,0,0,0.55)';
-    ctx.beginPath();
-    ctx.roundRect(lx,ly,boxW,legRows.length*rowH+pad*2+20,4);
-    ctx.fill();
-    ctx.fillStyle='#ccc'; ctx.font='bold 9px Montserrat,sans-serif'; ctx.textAlign='left';
-    ctx.fillText('ТАЙЛБАР', lx+pad, ly+pad+9);
-    legRows.forEach((row,i)=>{
-      const chip=row.querySelector('.leg-chip');
-      const label=row.querySelector('span:last-child');
-      if(!chip||!label) return;
-      const color=chip.style.background||'#3b82f6';
-      const ry=ly+pad+20+i*rowH;
+  // 4. Legend (bottom-right) — use layers state directly (avoids DOM selector mismatch)
+  const visLayers=layers.filter(l=>l.visible);
+  if(visLayers.length){
+    const pad=8, rowH=15, boxW=130;
+    const totalH=visLayers.length*rowH+pad*2+14;
+    const lx=w-boxW-10, ly=h-totalH-10;
+    ctx.fillStyle='rgba(0,0,0,0.6)';
+    ctx.beginPath(); ctx.rect(lx,ly,boxW,totalH); ctx.fill();
+    ctx.fillStyle='#aaa'; ctx.font='bold 8px sans-serif'; ctx.textAlign='left';
+    ctx.fillText('ТАЙЛБАР', lx+pad, ly+pad+8);
+    visLayers.forEach((l,i)=>{
+      const color=l.style.color||'#3b82f6';
+      const ry=ly+pad+14+i*rowH;
       ctx.fillStyle=color;
-      ctx.fillRect(lx+pad, ry, 10, 10);
-      ctx.fillStyle='#ddd'; ctx.font='9px Montserrat,sans-serif';
-      ctx.fillText(label.textContent.trim().slice(0,16), lx+pad+14, ry+9);
+      if(l.type==='point'){
+        ctx.beginPath(); ctx.arc(lx+pad+5, ry+5, 5, 0, Math.PI*2); ctx.fill();
+      } else {
+        ctx.fillRect(lx+pad, ry+2, 14, l.type==='line'?2:9);
+      }
+      ctx.fillStyle='#ddd'; ctx.font='9px sans-serif';
+      ctx.fillText(l.name.slice(0,18), lx+pad+18, ry+9);
     });
   }
 
