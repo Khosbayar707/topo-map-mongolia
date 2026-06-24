@@ -288,7 +288,6 @@ html,body{height:100%;font-family:'Montserrat',sans-serif;font-size:11px;backgro
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://api.mapbox.com/mapbox.js/plugins/leaflet-image/v0.0.4/leaflet-image.js"></script>
 
 <script>
 const R2 = 'https://pub-2d7bdb113e09406eab77dc06705c4461.r2.dev';
@@ -792,20 +791,57 @@ function switchTab(name,el){
   if(name==='chart') renderChart();
 }
 
-// ── Capture map using leaflet-image ────────────────────────────────────────
-function captureMap(){
-  return new Promise((resolve,reject)=>{
-    leafletImage(map,function(err,canvas){
-      if(err) return reject(new Error(err));
-      // Overlay overlays (title, north arrow, legend) onto captured canvas
-      const wrap=document.getElementById('map-wrap');
-      const out=document.createElement('canvas');
-      out.width=canvas.width; out.height=canvas.height;
-      const ctx=out.getContext('2d');
-      ctx.drawImage(canvas,0,0);
-      resolve(out);
+// ── Capture map to canvas (manual tile + SVG renderer) ─────────────────────
+async function captureMap(){
+  const container=map.getContainer();
+  const w=container.clientWidth, h=container.clientHeight;
+  const scale=2;
+  const canvas=document.createElement('canvas');
+  canvas.width=w*scale; canvas.height=h*scale;
+  const ctx=canvas.getContext('2d');
+  ctx.scale(scale,scale);
+
+  // Background
+  ctx.fillStyle='#1a1a2e';
+  ctx.fillRect(0,0,w,h);
+
+  // Draw tile layers using Leaflet's internal _tiles map
+  const panePos=map._getMapPanePos();
+  map.eachLayer(layer=>{
+    if(!(layer instanceof L.TileLayer)||!layer._tiles) return;
+    const tileSize=layer.getTileSize();
+    const pixelOrigin=map.getPixelOrigin();
+    const opacity=layer.options.opacity!==undefined?layer.options.opacity:1;
+    ctx.globalAlpha=opacity;
+    Object.values(layer._tiles).forEach(({el,coords})=>{
+      if(!el||!el.complete||el.naturalWidth===0) return;
+      const nw=coords.scaleBy(tileSize).subtract(pixelOrigin);
+      try{ ctx.drawImage(el, nw.x+panePos.x, nw.y+panePos.y, tileSize.x, tileSize.y); }catch(e){}
     });
+    ctx.globalAlpha=1;
   });
+
+  // Draw SVG vector layers (GeoJSON) via XMLSerializer
+  const overlayPane=container.querySelector('.leaflet-overlay-pane');
+  if(overlayPane){
+    for(const svgEl of overlayPane.querySelectorAll('svg')){
+      const rect=svgEl.getBoundingClientRect();
+      const cRect=container.getBoundingClientRect();
+      const xml=new XMLSerializer().serializeToString(svgEl);
+      const blob=new Blob([xml],{type:'image/svg+xml'});
+      const url=URL.createObjectURL(blob);
+      await new Promise(res=>{
+        const img=new Image();
+        img.onload=()=>{
+          ctx.drawImage(img, rect.left-cRect.left, rect.top-cRect.top, rect.width, rect.height);
+          URL.revokeObjectURL(url); res();
+        };
+        img.onerror=()=>{ URL.revokeObjectURL(url); res(); };
+        img.src=url;
+      });
+    }
+  }
+  return canvas;
 }
 
 // ── Export PNG ─────────────────────────────────────────────────────────────
