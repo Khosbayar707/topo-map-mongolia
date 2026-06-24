@@ -276,23 +276,38 @@
 
   <div class="lsection">
     <div class="lsection-head">Garmin цаг руу татах</div>
-    <div style="padding:10px 14px 4px;font-size:0.76rem;color:#a0b0c0;line-height:1.5">
-      Топографийн зургийг Garmin цагандаа суулгаж ашиглах боломжтой.<br>
-      <b>BirdsEye (.jnx)</b> — Зурагт суулгасны дараа Garmin Explore апп-аас харна.
+    <div style="padding:10px 14px 6px;font-size:0.76rem;color:#a0b0c0;line-height:1.5">
+      Топографийн зургийг Garmin цагандаа суулгаж ашиглах боломжтой.
     </div>
+
+    <div style="padding:0 14px 4px;font-size:0.72rem;color:#39d98a;font-weight:600">Custom Maps — KMZ (Garmin Venu, Fenix г.м.)</div>
+    <div style="padding:0 14px 8px;font-size:0.7rem;color:#7a8a9a">
+      11 файл татаж → <code style="background:#1a2a1a;padding:1px 4px;border-radius:3px">/GARMIN/CustomMaps/</code> хавтсанд хуулна
+    </div>
+    <div id="kmz-list" style="padding:0 14px 4px;display:grid;grid-template-columns:1fr 1fr;gap:5px"></div>
+    <div style="padding:4px 14px 12px">
+      <a class="btn-garmin-dl" id="kmz-all-btn" href="#" style="font-size:0.75rem">⬇ Бүгдийг татах (ZIP · ~261 MB)</a>
+    </div>
+
+    <div style="padding:0 14px 4px;font-size:0.72rem;color:#39d98a;font-weight:600">BirdsEye — JNX (GPS navigator, Oregon г.м.)</div>
     <a class="btn-garmin-dl"
        href="https://pub-2d7bdb113e09406eab77dc06705c4461.r2.dev/downloads/topo_garmin.jnx"
-       download="topo_garmin.jnx">
+       download="topo_garmin.jnx" style="margin-bottom:8px">
       ⬇ Топо зураг татах (JNX · ~289 MB)
     </a>
+
     <div style="padding:4px 14px 10px;font-size:0.68rem;color:#7a8a9a">
       Суулгах зааврыг <a href="#" id="jnx-help-toggle" style="color:#39d98a">эндээс</a> уншина уу.
     </div>
     <div id="jnx-help" style="display:none;padding:0 14px 12px;font-size:0.73rem;color:#a0b0c0;line-height:1.6">
-      1. Файлыг татаж авна<br>
+      <b>KMZ (Custom Maps):</b><br>
+      1. 11 файлыг татаж авна<br>
       2. Garmin-г USB-ээр компьютерт холбоно<br>
-      3. <code style="background:#1a2a1a;padding:1px 4px;border-radius:3px">/GARMIN/BirdsEye/</code> хавтсанд хуулна<br>
-      4. Цагнаасаа Map → BirdsEye сонгоно
+      3. <code style="background:#1a2a1a;padding:1px 4px;border-radius:3px">/GARMIN/CustomMaps/</code> хавтсанд хуулна<br>
+      4. Цагаа дахин асаана<br><br>
+      <b>JNX (BirdsEye):</b><br>
+      1. Файлыг татаж авна<br>
+      2. <code style="background:#1a2a1a;padding:1px 4px;border-radius:3px">/GARMIN/BirdsEye/</code> хавтсанд хуулна
     </div>
   </div>
 </div>
@@ -379,6 +394,31 @@ document.getElementById('jnx-help-toggle').addEventListener('click', e => {
   e.preventDefault();
   const el = document.getElementById('jnx-help');
   el.style.display = el.style.display === 'none' ? 'block' : 'none';
+});
+
+// KMZ татах товчнууд
+const R2_DL = 'https://pub-2d7bdb113e09406eab77dc06705c4461.r2.dev/downloads';
+const kmzList = document.getElementById('kmz-list');
+for (let i = 1; i <= 11; i++) {
+  const fname = `mongolia_topo_hd_part${i}.kmz`;
+  const a = document.createElement('a');
+  a.href = `${R2_DL}/${fname}`;
+  a.download = fname;
+  a.className = 'btn-garmin-dl';
+  a.style.cssText = 'font-size:0.7rem;padding:6px 8px;margin:0';
+  a.textContent = `⬇ Part ${i}`;
+  kmzList.appendChild(a);
+}
+document.getElementById('kmz-all-btn').addEventListener('click', e => {
+  e.preventDefault();
+  for (let i = 1; i <= 11; i++) {
+    setTimeout(() => {
+      const a = document.createElement('a');
+      a.href = `${R2_DL}/mongolia_topo_hd_part${i}.kmz`;
+      a.download = `mongolia_topo_hd_part${i}.kmz`;
+      a.click();
+    }, i * 800);
+  }
 });
 
 // ── Default colors ────────────────────────────────────────────────────
