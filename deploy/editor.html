@@ -868,28 +868,57 @@ async function captureMap(PX){
     ctx.globalAlpha=1;
   });
 
-  // 2. SVG vector overlay — use same coordinate system as tiles (panePos + svgPos)
-  const overlayPane=mapEl.querySelector('.leaflet-overlay-pane');
-  if(overlayPane){
-    for(const svgEl of overlayPane.querySelectorAll('svg')){
-      const svgPos=L.DomUtil.getPosition(svgEl);
-      const dx=panePos.x+(svgPos?svgPos.x:0);
-      const dy=panePos.y+(svgPos?svgPos.y:0);
-      const sw=parseInt(svgEl.getAttribute('width'))||svgEl.clientWidth;
-      const sh=parseInt(svgEl.getAttribute('height'))||svgEl.clientHeight;
-      const xml=new XMLSerializer().serializeToString(svgEl);
-      const url=URL.createObjectURL(new Blob([xml],{type:'image/svg+xml'}));
-      await new Promise(res=>{
-        const img=new Image();
-        img.onload=()=>{
-          ctx.drawImage(img, dx, dy, sw, sh);
-          URL.revokeObjectURL(url); res();
-        };
-        img.onerror=()=>{ URL.revokeObjectURL(url); res(); };
-        img.src=url;
-      });
-    }
+  // 2. GeoJSON layers — draw directly to canvas using Leaflet projection
+  // This is pixel-perfect: same latLngToContainerPoint Leaflet uses internally
+  function hexAlpha(hex,a){
+    const {r,g,b}=hexToRgb(hex||'#3b82f6');
+    return `rgba(${r},${g},${b},${a??0.5})`;
   }
+  function drawRing(ring){
+    ring.forEach((c,i)=>{
+      const p=map.latLngToContainerPoint([c[1],c[0]]);
+      i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);
+    });
+  }
+  layers.forEach(lyr=>{
+    if(!lyr.visible||!lyr.geojson) return;
+    const s=lyr.style;
+    lyr.geojson.features.forEach(f=>{
+      const gt=f.geometry.type;
+      const color=getFeatureColor(f,s);
+      ctx.save();
+      if(gt==='Polygon'||gt==='MultiPolygon'){
+        const polys=gt==='Polygon'?[f.geometry.coordinates]:f.geometry.coordinates;
+        polys.forEach(poly=>{
+          ctx.beginPath();
+          poly.forEach(ring=>{ drawRing(ring); ctx.closePath(); });
+          ctx.fillStyle=hexAlpha(color,s.fillOpacity??0.5);
+          ctx.fill('evenodd');
+          ctx.strokeStyle=s.strokeColor||'#ffffff';
+          ctx.lineWidth=s.width||1;
+          ctx.globalAlpha=s.opacity??1;
+          ctx.stroke();
+        });
+      } else if(gt==='LineString'||gt==='MultiLineString'){
+        const lines=gt==='LineString'?[f.geometry.coordinates]:f.geometry.coordinates;
+        ctx.strokeStyle=color;
+        ctx.lineWidth=s.width||2;
+        ctx.globalAlpha=s.opacity??0.8;
+        lines.forEach(line=>{
+          ctx.beginPath(); drawRing(line); ctx.stroke();
+        });
+      } else if(gt==='Point'||gt==='MultiPoint'){
+        const pts=gt==='Point'?[f.geometry.coordinates]:f.geometry.coordinates;
+        ctx.fillStyle=color;
+        ctx.globalAlpha=s.fillOpacity??0.8;
+        pts.forEach(c=>{
+          const p=map.latLngToContainerPoint([c[1],c[0]]);
+          ctx.beginPath(); ctx.arc(p.x,p.y,s.width*3||6,0,Math.PI*2); ctx.fill();
+        });
+      }
+      ctx.restore();
+    });
+  });
 
   // 3. Labels — project from geographic centroid using Leaflet's own projection
   ctx.font='10px sans-serif';
