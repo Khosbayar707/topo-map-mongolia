@@ -215,9 +215,32 @@ html,body{height:100%;font-family:'Montserrat',sans-serif;font-size:11px;backgro
       <option value="terrain">Рельеф</option>
     </select>
     <button class="tbtn" id="btn-topo" onclick="toggleTopo()">Топо OFF</button>
-    <button class="tbtn" onclick="exportPng()">⬇ PNG</button>
-    <button class="tbtn green" onclick="exportPdf()">⬇ PDF</button>
+    <button class="tbtn" onclick="openExpDlg()">⬇ Экспорт</button>
     <button class="tbtn" onclick="window.location='/'">← Нүүр</button>
+  </div>
+
+  <!-- Export dialog -->
+  <div id="export-dlg" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:16px;z-index:9999;min-width:230px;box-shadow:0 8px 32px #000a">
+    <div style="font-size:11px;font-weight:700;margin-bottom:10px;color:var(--text1)">Экспортын тохиргоо</div>
+    <label style="font-size:9px;color:var(--text2);display:block;margin-bottom:3px">Хэмжээ / Цаас</label>
+    <select id="exp-size" style="width:100%;margin-bottom:10px;background:var(--bg3);border:1px solid var(--border);color:var(--text1);padding:5px;font-size:10px;border-radius:3px">
+      <option value="screen">Дэлгэцийн хэмжээ</option>
+      <option value="a4l" selected>A4 хэвтээ (297×210мм)</option>
+      <option value="a4p">A4 босоо (210×297мм)</option>
+      <option value="a3l">A3 хэвтээ (420×297мм)</option>
+      <option value="a3p">A3 босоо (297×420мм)</option>
+    </select>
+    <label style="font-size:9px;color:var(--text2);display:block;margin-bottom:3px">Нягтаршил (PNG)</label>
+    <select id="exp-dpi" style="width:100%;margin-bottom:12px;background:var(--bg3);border:1px solid var(--border);color:var(--text1);padding:5px;font-size:10px;border-radius:3px">
+      <option value="1">Бага (1×)</option>
+      <option value="2" selected>Дунд (2×)</option>
+      <option value="3">Өндөр (3×)</option>
+    </select>
+    <div style="display:flex;gap:6px">
+      <button onclick="doExport('png')" style="flex:1;background:#27ae60;border:none;color:#fff;padding:7px;border-radius:3px;font-size:10px;cursor:pointer;font-weight:600">⬇ PNG</button>
+      <button onclick="doExport('pdf')" style="flex:1;background:#2980b9;border:none;color:#fff;padding:7px;border-radius:3px;font-size:10px;cursor:pointer;font-weight:600">⬇ PDF</button>
+      <button onclick="closeExpDlg()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);padding:7px 10px;border-radius:3px;font-size:10px;cursor:pointer">✕</button>
+    </div>
   </div>
 
   <div id="left">
@@ -791,11 +814,31 @@ function switchTab(name,el){
   if(name==='chart') renderChart();
 }
 
-// ── Capture map to canvas (manual tile + SVG renderer) ─────────────────────
-async function captureMap(){
-  const container=map.getContainer();
-  const w=container.clientWidth, h=container.clientHeight;
-  const PX=2; // retina scale
+// ── Export dialog ──────────────────────────────────────────────────────────
+function openExpDlg(){ document.getElementById('export-dlg').style.display='block'; }
+function closeExpDlg(){ document.getElementById('export-dlg').style.display='none'; }
+
+const PDF_SIZES={
+  screen: null,
+  a4l:{pw:297,ph:210,orient:'landscape',fmt:'a4'},
+  a4p:{pw:210,ph:297,orient:'portrait',fmt:'a4'},
+  a3l:{pw:420,ph:297,orient:'landscape',fmt:'a3'},
+  a3p:{pw:297,ph:420,orient:'portrait',fmt:'a3'},
+};
+
+async function doExport(fmt){
+  closeExpDlg();
+  const sizeKey=document.getElementById('exp-size').value;
+  const dpi=parseInt(document.getElementById('exp-dpi').value)||2;
+  if(fmt==='png') await exportPng(dpi);
+  else await exportPdf(PDF_SIZES[sizeKey]||PDF_SIZES.a4l, dpi);
+}
+
+// ── Capture map to canvas ──────────────────────────────────────────────────
+async function captureMap(PX){
+  PX=PX||2;
+  const mapEl=document.getElementById('map');
+  const w=mapEl.clientWidth, h=mapEl.clientHeight;
   const canvas=document.createElement('canvas');
   canvas.width=w*PX; canvas.height=h*PX;
   const ctx=canvas.getContext('2d');
@@ -805,40 +848,38 @@ async function captureMap(){
   ctx.fillStyle='#1a1a2e';
   ctx.fillRect(0,0,w,h);
 
-  // Clip all rendering to map container bounds
+  // Clip everything to exact map bounds
   ctx.save();
   ctx.beginPath(); ctx.rect(0,0,w,h); ctx.clip();
 
-  // 1. Tile layers — read Leaflet's internal _tiles cache
+  // 1. Tile layers — read Leaflet's _tiles cache
   const panePos=map._getMapPanePos();
+  const pixelOrigin=map.getPixelOrigin();
   map.eachLayer(layer=>{
     if(!(layer instanceof L.TileLayer)||!layer._tiles) return;
-    const tileSize=layer.getTileSize();
-    const pixelOrigin=map.getPixelOrigin();
-    const opacity=layer.options.opacity!==undefined?layer.options.opacity:1;
-    ctx.globalAlpha=opacity;
+    const ts=layer.getTileSize();
+    const op=layer.options.opacity!=null?layer.options.opacity:1;
+    ctx.globalAlpha=op;
     Object.values(layer._tiles).forEach(({el,coords})=>{
       if(!el||!el.complete||el.naturalWidth===0) return;
-      const nw=coords.scaleBy(tileSize).subtract(pixelOrigin);
-      try{ ctx.drawImage(el, nw.x+panePos.x, nw.y+panePos.y, tileSize.x, tileSize.y); }catch(e){}
+      const nw=coords.scaleBy(ts).subtract(pixelOrigin);
+      try{ ctx.drawImage(el, nw.x+panePos.x, nw.y+panePos.y, ts.x, ts.y); }catch(e){}
     });
     ctx.globalAlpha=1;
   });
 
-  // 2. SVG vector overlay (GeoJSON) — serialize and draw at screen-correct offset
-  const cRect=container.getBoundingClientRect();
-  const overlayPane=container.querySelector('.leaflet-overlay-pane');
+  // 2. SVG vector overlay — serialize and draw at correct viewport offset
+  const mapRect=mapEl.getBoundingClientRect();
+  const overlayPane=mapEl.querySelector('.leaflet-overlay-pane');
   if(overlayPane){
     for(const svgEl of overlayPane.querySelectorAll('svg')){
-      const rect=svgEl.getBoundingClientRect();
-      const dx=rect.left-cRect.left, dy=rect.top-cRect.top;
+      const r=svgEl.getBoundingClientRect();
       const xml=new XMLSerializer().serializeToString(svgEl);
-      const blob=new Blob([xml],{type:'image/svg+xml'});
-      const url=URL.createObjectURL(blob);
+      const url=URL.createObjectURL(new Blob([xml],{type:'image/svg+xml'}));
       await new Promise(res=>{
         const img=new Image();
         img.onload=()=>{
-          ctx.drawImage(img, dx, dy, rect.width, rect.height);
+          ctx.drawImage(img, r.left-mapRect.left, r.top-mapRect.top, r.width, r.height);
           URL.revokeObjectURL(url); res();
         };
         img.onerror=()=>{ URL.revokeObjectURL(url); res(); };
@@ -846,90 +887,102 @@ async function captureMap(){
       });
     }
   }
+
+  // 3. Permanent labels (tooltips)
+  mapEl.querySelectorAll('.leaflet-tooltip').forEach(tt=>{
+    const r=tt.getBoundingClientRect();
+    if(r.width===0) return;
+    const tx=r.left-mapRect.left, ty=r.top-mapRect.top;
+    const text=tt.textContent.trim();
+    if(!text) return;
+    ctx.font='10px sans-serif';
+    const tw=ctx.measureText(text).width;
+    ctx.fillStyle='rgba(255,255,255,0.85)';
+    ctx.fillRect(tx-2, ty-1, tw+6, r.height+2);
+    ctx.fillStyle='#222';
+    ctx.textAlign='left';
+    ctx.fillText(text, tx+1, ty+r.height-3);
+  });
+
   ctx.restore();
 
-  // 3. Title bar (drawn on canvas — avoids Cyrillic encoding issues in PDF)
+  // 4. Title
   const title=document.getElementById('map-title').value||'';
   if(title){
     ctx.font='bold 13px sans-serif';
     const tw=ctx.measureText(title).width+24;
-    const tx=(w-tw)/2, ty=8;
-    ctx.fillStyle='rgba(0,0,0,0.65)';
-    ctx.fillRect(tx,ty,tw,24);
+    ctx.fillStyle='rgba(0,0,0,0.7)';
+    ctx.fillRect((w-tw)/2, 8, tw, 24);
     ctx.fillStyle='#e6edf3';
     ctx.textAlign='center';
-    ctx.fillText(title, w/2, ty+16);
+    ctx.fillText(title, w/2, 25);
   }
 
-  // 4. Legend (bottom-right) — use layers state directly (avoids DOM selector mismatch)
-  const visLayers=layers.filter(l=>l.visible);
-  if(visLayers.length){
-    const pad=8, rowH=15, boxW=130;
-    const totalH=visLayers.length*rowH+pad*2+14;
-    const lx=w-boxW-10, ly=h-totalH-10;
-    ctx.fillStyle='rgba(0,0,0,0.6)';
-    ctx.beginPath(); ctx.rect(lx,ly,boxW,totalH); ctx.fill();
+  // 5. Legend
+  const visL=layers.filter(l=>l.visible);
+  if(visL.length){
+    const pad=8, rH=15, bW=140;
+    const totH=visL.length*rH+pad*2+14;
+    const lx=w-bW-10, ly=h-totH-10;
+    ctx.fillStyle='rgba(0,0,0,0.65)';
+    ctx.fillRect(lx,ly,bW,totH);
     ctx.fillStyle='#aaa'; ctx.font='bold 8px sans-serif'; ctx.textAlign='left';
     ctx.fillText('ТАЙЛБАР', lx+pad, ly+pad+8);
-    visLayers.forEach((l,i)=>{
+    visL.forEach((l,i)=>{
       const color=l.style.color||'#3b82f6';
-      const ry=ly+pad+14+i*rowH;
+      const ry=ly+pad+14+i*rH;
       ctx.fillStyle=color;
       if(l.type==='point'){
-        ctx.beginPath(); ctx.arc(lx+pad+5, ry+5, 5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(lx+pad+5,ry+5,5,0,Math.PI*2); ctx.fill();
       } else {
-        ctx.fillRect(lx+pad, ry+2, 14, l.type==='line'?2:9);
+        ctx.fillRect(lx+pad, ry+3, 14, l.type==='line'?2:8);
       }
       ctx.fillStyle='#ddd'; ctx.font='9px sans-serif';
-      ctx.fillText(l.name.slice(0,18), lx+pad+18, ry+9);
+      ctx.fillText(l.name.slice(0,20), lx+pad+18, ry+9);
     });
   }
 
-  // 5. North arrow
-  ctx.font='bold 16px sans-serif';
-  ctx.textAlign='center';
-  ctx.fillStyle='rgba(0,0,0,0.5)';
-  ctx.beginPath(); ctx.arc(w-24,24,14,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='#fff';
-  ctx.fillText('⬆', w-24, 30);
+  // 6. North arrow
+  ctx.fillStyle='rgba(0,0,0,0.55)';
+  ctx.beginPath(); ctx.arc(w-22,22,14,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#fff'; ctx.font='bold 15px sans-serif'; ctx.textAlign='center';
+  ctx.fillText('⬆', w-22, 28);
 
   return canvas;
 }
 
 // ── Export PNG ─────────────────────────────────────────────────────────────
-async function exportPng(){
+async function exportPng(PX){
   showLoader('PNG үүсгэж байна...');
   try{
-    const canvas=await captureMap();
+    const canvas=await captureMap(PX||2);
     const a=document.createElement('a');
     a.download=(document.getElementById('map-title').value||'map')+'.png';
-    a.href=canvas.toDataURL('image/png');a.click();
+    a.href=canvas.toDataURL('image/png'); a.click();
   }catch(e){alert('PNG алдаа: '+e.message);}
   hideLoader();
 }
 
 // ── Export PDF ─────────────────────────────────────────────────────────────
-async function exportPdf(){
+async function exportPdf(sz, PX){
   showLoader('PDF үүсгэж байна...');
   try{
-    const canvas=await captureMap();
+    sz=sz||{pw:297,ph:210,orient:'landscape',fmt:'a4'};
+    const canvas=await captureMap(PX||2);
     const {jsPDF}=window.jspdf;
-    const pw=297, ph=210;
-    const pdf=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
-    // Dark background
+    const pdf=new jsPDF({orientation:sz.orient,unit:'mm',format:sz.fmt||'a4'});
+    const pw=sz.pw, ph=sz.ph;
     pdf.setFillColor(26,26,46);
     pdf.rect(0,0,pw,ph,'F');
-    // Fit canvas image into page keeping aspect ratio
-    const cw=canvas.width/2, ch=canvas.height/2; // undo PX scale for mm calc
-    const ratio=Math.min((pw-8)/cw, (ph-8)/ch);
-    const iw=cw*ratio, ih=ch*ratio;
-    const ox=(pw-iw)/2, oy=(ph-ih)/2;
     const imgData=canvas.toDataURL('image/png');
-    pdf.addImage(imgData,'PNG',ox,oy,iw,ih,'','FAST');
-    pdf.setFontSize(5);pdf.setTextColor(100,110,120);
+    // Fit canvas to page preserving aspect ratio
+    const cw=canvas.width/2, ch=canvas.height/2;
+    const ratio=Math.min((pw-8)/cw,(ph-8)/ch);
+    const iw=cw*ratio, ih=ch*ratio;
+    pdf.addImage(imgData,'PNG',(pw-iw)/2,(ph-ih)/2,iw,ih,'','FAST');
+    pdf.setFontSize(5); pdf.setTextColor(100,110,120);
     pdf.text('topo-map.pages.dev',pw-3,ph-2,{align:'right'});
-    const fname=(document.getElementById('map-title').value||'map')+'.pdf';
-    pdf.save(fname);
+    pdf.save((document.getElementById('map-title').value||'map')+'.pdf');
   }catch(e){alert('PDF алдаа: '+e.message);}
   hideLoader();
 }
