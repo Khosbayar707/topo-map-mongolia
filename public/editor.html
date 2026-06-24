@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Газрын зургийн редактор</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:'Montserrat',sans-serif;font-size:11px;background:#0d1117;color:#c9d1d9;overflow:hidden}
+:root{
+  --bg0:#0d1117;--bg1:#161b22;--bg2:#1c2128;--bg3:#252b35;
+  --border:#30363d;--accent:#3b82f6;--accent2:#39d98a;
+  --text0:#e6edf3;--text1:#c9d1d9;--text2:#8b949e;
+  --red:#e94560;--green:#39d98a;--yellow:#f5a623;
+}
+
+/* ── Layout ── */
+#app{display:grid;grid-template-rows:36px 1fr;grid-template-columns:230px 1fr 260px;height:100vh}
+
+/* ── Topbar ── */
+#topbar{
+  grid-column:1/-1;background:var(--bg1);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:6px;padding:0 10px;
+}
+#topbar .logo{font-size:10px;font-weight:600;color:var(--text2);letter-spacing:.5px;margin-right:6px;white-space:nowrap}
+#map-title{
+  flex:1;max-width:260px;height:22px;background:var(--bg2);border:1px solid var(--border);
+  border-radius:4px;padding:0 7px;font-family:'Montserrat',sans-serif;font-size:10px;color:var(--text0);
+}
+#map-title:focus{outline:none;border-color:var(--accent)}
+.sp{flex:1}
+.tbtn{
+  height:22px;padding:0 8px;background:var(--bg2);border:1px solid var(--border);
+  border-radius:4px;color:var(--text1);font-family:'Montserrat',sans-serif;font-size:10px;
+  cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap;
+}
+.tbtn:hover{background:var(--bg3);color:var(--text0)}
+.tbtn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.tbtn.primary:hover{opacity:.85}
+.tbtn.green{background:#166534;border-color:#166534;color:#bbf7d0}
+.tbtn.green:hover{opacity:.85}
+
+/* ── Left panel ── */
+#left{
+  background:var(--bg1);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.ph{
+  padding:5px 8px;font-size:9px;font-weight:600;letter-spacing:.6px;
+  color:var(--text2);text-transform:uppercase;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+}
+.ph .pbtn{
+  height:18px;padding:0 6px;background:var(--bg3);border:1px solid var(--border);
+  border-radius:3px;color:var(--text1);font-size:9px;cursor:pointer;font-family:'Montserrat',sans-serif;
+}
+.pbtn:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* Drop zone */
+#drop-zone{
+  margin:6px 8px;border:1px dashed var(--border);border-radius:5px;
+  padding:8px;text-align:center;color:var(--text2);font-size:9px;cursor:pointer;
+  transition:all .2s;flex-shrink:0;
+}
+#drop-zone:hover,#drop-zone.drag-over{border-color:var(--accent);color:var(--accent);background:#1a2236}
+#drop-zone input{display:none}
+
+/* Layer list */
+#layer-list{flex:0 0 auto;overflow-y:auto;max-height:160px}
+.litem{
+  padding:4px 8px;display:flex;align-items:center;gap:5px;
+  border-bottom:1px solid var(--border);cursor:pointer;user-select:none;
+}
+.litem:hover{background:var(--bg2)}
+.litem.active{background:var(--bg3)}
+.ldot{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+.lname{flex:1;font-size:10px;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lact{display:flex;gap:2px;opacity:0}
+.litem:hover .lact{opacity:1}
+.lact button{
+  width:16px;height:16px;background:none;border:none;cursor:pointer;
+  color:var(--text2);padding:0;display:flex;align-items:center;justify-content:center;font-size:11px;
+}
+.lact button:hover{color:var(--text0)}
+.lact button.del:hover{color:var(--red)}
+
+/* Style panel */
+#style-panel{flex:1;overflow-y:auto;padding:8px}
+.srow{margin-bottom:7px}
+.slbl{font-size:9px;color:var(--text2);margin-bottom:3px;display:block}
+.srow select,.srow input[type=text],.srow input[type=number]{
+  width:100%;height:22px;background:var(--bg2);border:1px solid var(--border);
+  border-radius:3px;padding:0 6px;font-family:'Montserrat',sans-serif;font-size:10px;color:var(--text0);
+}
+.srow select:focus,.srow input:focus{outline:none;border-color:var(--accent)}
+.srow select option{background:var(--bg2)}
+.row2{display:flex;gap:5px;align-items:center}
+.row2 input[type=range]{flex:1;accent-color:var(--accent);height:3px}
+.row2 span{font-size:9px;color:var(--text2);min-width:26px;text-align:right}
+.color-chip{
+  width:22px;height:22px;border-radius:3px;border:1px solid var(--border);
+  cursor:pointer;flex-shrink:0;position:relative;overflow:hidden;
+}
+.color-chip input[type=color]{position:absolute;opacity:0;width:100%;height:100%;cursor:pointer}
+.sep{height:1px;background:var(--border);margin:8px 0}
+.cat-list{max-height:80px;overflow-y:auto;margin-top:3px}
+.cat-row{display:flex;align-items:center;gap:4px;margin-bottom:2px;font-size:9px;color:var(--text1)}
+.cat-row .color-chip{width:14px;height:14px}
+
+/* ── Map ── */
+#map-wrap{position:relative;overflow:hidden}
+#map{width:100%;height:100%}
+#map-overlay-title{
+  position:absolute;top:8px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,.65);color:#fff;padding:3px 10px;border-radius:3px;
+  font-size:11px;font-weight:600;pointer-events:none;z-index:1000;white-space:nowrap;
+  font-family:'Montserrat',sans-serif;
+}
+#legend-box{
+  position:absolute;bottom:28px;right:8px;background:rgba(15,20,30,.85);
+  border:1px solid var(--border);border-radius:5px;padding:6px 8px;z-index:1000;
+  font-family:'Montserrat',sans-serif;min-width:90px;
+}
+#legend-box .leg-title{font-size:8px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:4px;letter-spacing:.4px}
+.leg-row{display:flex;align-items:center;gap:5px;margin-bottom:3px;font-size:9px;color:var(--text1)}
+.leg-sym{width:16px;height:3px;border-radius:1px;flex-shrink:0}
+.leg-sym.pt{width:9px;height:9px;border-radius:50%}
+#north-arrow{
+  position:absolute;top:8px;right:8px;z-index:1000;
+  width:26px;height:26px;background:rgba(0,0,0,.55);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;
+}
+
+/* ── Right panel ── */
+#right{background:var(--bg1);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.tab{
+  flex:1;padding:6px 4px;font-size:9px;font-weight:500;text-align:center;
+  cursor:pointer;color:var(--text2);letter-spacing:.3px;border-bottom:2px solid transparent;
+}
+.tab.active{color:var(--text0);border-bottom-color:var(--accent)}
+.tab-pane{display:none;flex:1;overflow-y:auto;flex-direction:column}
+.tab-pane.active{display:flex}
+
+/* Stats */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:6px}
+.stat-card{background:var(--bg2);border-radius:4px;padding:6px 8px;text-align:center}
+.stat-val{font-size:16px;font-weight:600;color:var(--text0)}
+.stat-lbl{font-size:8px;color:var(--text2);margin-top:1px}
+.chart-wrap{padding:0 6px 6px;flex:1}
+.chart-label{font-size:9px;color:var(--text2);padding:4px 6px 3px}
+#chart-canvas{width:100%!important}
+
+/* Attribute table */
+#attr-panel{padding:6px}
+#attr-hint{font-size:9px;color:var(--text2);text-align:center;margin-top:20px}
+.attr-tbl{width:100%;border-collapse:collapse;font-size:9px}
+.attr-tbl td{padding:3px 4px;border-bottom:1px solid var(--border);vertical-align:top;word-break:break-all}
+.attr-tbl td:first-child{color:var(--text2);width:40%;font-weight:500}
+.attr-tbl td:last-child{color:var(--text0)}
+
+/* Filter panel */
+#filter-panel{padding:6px;display:flex;flex-direction:column;gap:5px}
+.filter-row{display:flex;gap:4px;align-items:center}
+.filter-row select,.filter-row input{
+  height:22px;background:var(--bg2);border:1px solid var(--border);
+  border-radius:3px;padding:0 5px;font-size:9px;color:var(--text0);font-family:'Montserrat',sans-serif;
+}
+.filter-row select{flex:1}.filter-row input{flex:1}
+.fbtn{
+  height:22px;padding:0 8px;background:var(--accent);border:none;border-radius:3px;
+  color:#fff;font-size:9px;cursor:pointer;font-family:'Montserrat',sans-serif;
+}
+#filter-result{font-size:9px;color:var(--text2);padding:3px 2px}
+
+/* Popup */
+.leaflet-popup-content-wrapper{background:var(--bg2);border:1px solid var(--border);color:var(--text1);border-radius:5px;box-shadow:0 2px 8px rgba(0,0,0,.5);font-family:'Montserrat',sans-serif;font-size:9px;padding:0}
+.leaflet-popup-content{margin:0;padding:0}
+.leaflet-popup-tip{background:var(--bg2)}
+.leaflet-popup-close-button{color:var(--text2)!important;font-size:14px!important;top:3px!important;right:5px!important}
+.pop-table{width:100%;border-collapse:collapse;font-size:9px}
+.pop-table td{padding:3px 8px;border-bottom:1px solid var(--border)}
+.pop-table td:first-child{color:var(--text2);white-space:nowrap}
+.pop-table td:last-child{color:var(--text0);font-weight:500;word-break:break-all}
+.pop-head{padding:5px 8px;font-size:9px;font-weight:600;color:var(--text0);border-bottom:1px solid var(--border);background:var(--bg3);border-radius:5px 5px 0 0}
+
+/* Loading */
+#loader{position:fixed;inset:0;background:var(--bg0);display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column;gap:8px;font-size:10px;color:var(--text2)}
+.spin{width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loader.hidden{display:none}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:var(--bg1)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+</style>
+</head>
+<body>
+
+<div id="loader"><div class="spin"></div><span id="loader-msg">Ачааллаж байна...</span></div>
+
+<div id="app">
+  <div id="topbar">
+    <span class="logo">ЗУРАГ РЕДАКТОР</span>
+    <input id="map-title" type="text" value="Монгол улсын газрын зураг" placeholder="Гарчиг...">
+    <div class="sp"></div>
+    <button class="tbtn" onclick="toggleTopo()">🗺 Топо</button>
+    <button class="tbtn" onclick="exportPng()">⬇ PNG</button>
+    <button class="tbtn green" onclick="exportPdf()">⬇ PDF</button>
+    <button class="tbtn" onclick="window.location='/'">← Нүүр</button>
+  </div>
+
+  <div id="left">
+    <div class="ph">
+      Давхаргууд
+      <button class="pbtn" onclick="document.getElementById('shp-input').click()">+ SHP</button>
+    </div>
+    <div id="drop-zone" onclick="document.getElementById('shp-input').click()">
+      <input id="shp-input" type="file" multiple webkitdirectory accept=".shp,.dbf,.prj,.shx,.cpg">
+      📂 SHP фолдер дуслуулах / дарах
+    </div>
+    <div id="layer-list"></div>
+    <div class="sep" style="margin:0"></div>
+    <div id="style-panel"><div style="font-size:9px;color:var(--text2);text-align:center;margin-top:12px">Давхарга сонгоно уу</div></div>
+  </div>
+
+  <div id="map-wrap">
+    <div id="map"></div>
+    <div id="map-overlay-title"></div>
+    <div id="north-arrow">⬆</div>
+    <div id="legend-box"><div class="leg-title">Тайлбар</div><div id="legend-rows"></div></div>
+  </div>
+
+  <div id="right">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('stats',this)">Статистик</div>
+      <div class="tab" onclick="switchTab('chart',this)">Диаграмм</div>
+      <div class="tab" onclick="switchTab('attr',this)">Аттрибут</div>
+      <div class="tab" onclick="switchTab('filter',this)">Шүүлт</div>
+    </div>
+    <div class="tab-pane active" id="pane-stats">
+      <div class="stat-grid" id="stat-grid"><div style="font-size:9px;color:var(--text2);text-align:center;padding:12px;grid-column:1/-1">Давхарга сонгоно уу</div></div>
+    </div>
+    <div class="tab-pane" id="pane-chart">
+      <div class="chart-label">Аттрибутаар харуулах талбар:</div>
+      <div style="padding:0 6px 4px;display:flex;gap:4px">
+        <select id="chart-field" style="flex:1;height:22px;background:var(--bg2);border:1px solid var(--border);border-radius:3px;font-size:9px;color:var(--text0);font-family:'Montserrat',sans-serif" onchange="renderChart()">
+          <option value="">— сонгох —</option>
+        </select>
+        <select id="chart-type" style="width:60px;height:22px;background:var(--bg2);border:1px solid var(--border);border-radius:3px;font-size:9px;color:var(--text0);font-family:'Montserrat',sans-serif" onchange="renderChart()">
+          <option value="bar">Бар</option>
+          <option value="pie">Пай</option>
+        </select>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-canvas"></canvas></div>
+    </div>
+    <div class="tab-pane" id="pane-attr">
+      <div id="attr-panel"><div id="attr-hint">Зураг дээр feature дарна уу</div></div>
+    </div>
+    <div class="tab-pane" id="pane-filter">
+      <div id="filter-panel">
+        <div class="filter-row">
+          <select id="f-field" style="flex:1;height:22px;background:var(--bg2);border:1px solid var(--border);border-radius:3px;font-size:9px;color:var(--text0);font-family:'Montserrat',sans-serif"></select>
+        </div>
+        <div class="filter-row">
+          <select id="f-op" style="width:55px;height:22px;background:var(--bg2);border:1px solid var(--border);border-radius:3px;font-size:9px;color:var(--text0);font-family:'Montserrat',sans-serif">
+            <option>=</option><option>!=</option><option>></option><option><</option><option>агуулна</option>
+          </select>
+          <input id="f-val" type="text" placeholder="утга..." style="flex:1;height:22px;background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:0 5px;font-size:9px;color:var(--text0);font-family:'Montserrat',sans-serif">
+          <button class="fbtn" onclick="applyFilter()">OK</button>
+        </div>
+        <button style="width:100%;height:22px;background:var(--bg3);border:1px solid var(--border);border-radius:3px;color:var(--text2);font-size:9px;cursor:pointer;font-family:'Montserrat',sans-serif" onclick="clearFilter()">Шүүлтийг цэвэрлэх</button>
+        <div id="filter-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+<script>
+const R2 = 'https://pub-2d7bdb113e09406eab77dc06705c4461.r2.dev';
+const COLORS = ['#3b82f6','#e94560','#39d98a','#f5a623','#a855f7','#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6'];
+
+// ── State ──────────────────────────────────────────────────────────────────
+let layers = []; // {id,name,geojson,leafletLayer,style,visible,type}
+let selId = null;
+let chartInst = null;
+let filterActive = false;
+
+// ── Map ────────────────────────────────────────────────────────────────────
+const map = L.map('map',{center:[47,104],zoom:5,zoomControl:true,attributionControl:false});
+L.control.attribution({prefix:false}).addTo(map);
+L.control.scale({imperial:false,position:'bottomleft'}).addTo(map);
+
+const baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:20,opacity:0.4}).addTo(map);
+let topoLayer = null;
+let topoOn = false;
+
+function toggleTopo(){
+  if(topoOn){ if(topoLayer) map.removeLayer(topoLayer); topoOn=false; }
+  else {
+    if(!topoLayer) topoLayer = L.tileLayer(`${R2}/tiles/{z}/{x}/{y}.png`,{tms:true,maxNativeZoom:11,maxZoom:14,opacity:0.85,errorTileUrl:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'});
+    topoLayer.addTo(map); topoOn=true;
+  }
+}
+
+// Map title sync
+document.getElementById('map-title').addEventListener('input',e=>{
+  document.getElementById('map-overlay-title').textContent = e.target.value;
+});
+document.getElementById('map-overlay-title').textContent = document.getElementById('map-title').value;
+
+// ── Script loader ──────────────────────────────────────────────────────────
+function loadScript(src){
+  return new Promise((res,rej)=>{
+    if(document.querySelector(`script[src="${src}"]`)){res();return;}
+    const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);
+  });
+}
+
+// ── SHP Upload ─────────────────────────────────────────────────────────────
+const dz = document.getElementById('drop-zone');
+const inp = document.getElementById('shp-input');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag-over')});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag-over'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag-over');handleFiles([...e.dataTransfer.files])});
+inp.addEventListener('change',e=>handleFiles([...e.target.files]));
+
+async function handleFiles(files){
+  const groups={};
+  for(const f of files){
+    const parts = f.webkitRelativePath ? f.webkitRelativePath.split('/') : [f.name];
+    const folder = parts.length>1 ? parts[0] : f.name.replace(/\.\w+$/,'');
+    if(!groups[folder]) groups[folder]={};
+    const ext=f.name.split('.').pop().toLowerCase();
+    groups[folder][ext]=f;
+  }
+  for(const [name,g] of Object.entries(groups)){
+    if(!g.shp||!g.dbf) continue;
+    await parseShp(name,g);
+  }
+}
+
+async function parseShp(name,g){
+  showLoader(`"${name}" уншиж байна...`);
+  try{
+    await loadScript('https://unpkg.com/shpjs@4.0.4/dist/shp.js');
+    await loadScript('https://unpkg.com/proj4@2.9.0/dist/proj4.js');
+    const readBuf=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsArrayBuffer(f)});
+    const shpBuf=await readBuf(g.shp);
+    const dbfBuf=await readBuf(g.dbf);
+    const prjStr=g.prj?await g.prj.text():'';
+    const geomF=shp.parseShp(shpBuf,prjStr);
+    const attrs=shp.parseDbf(dbfBuf);
+    const geojson=shp.combine([geomF,attrs]);
+    if(prjStr&&typeof proj4!=='undefined'&&!prjStr.includes('WGS_1984')&&!prjStr.includes('GCS_WGS_1984')){
+      try{
+        const src=proj4.Proj(prjStr);const wgs=proj4.Proj('EPSG:4326');
+        geojson.features.forEach(f=>{
+          if(!f.geometry)return;
+          function rp(c){if(typeof c[0]==='number'){const[x,y]=proj4.transform(src,wgs,[c[0],c[1]]);c[0]=x;c[1]=y;}else c.forEach(rp);}
+          rp(f.geometry.coordinates);
+        });
+      }catch{}
+    }
+    addLayer(name,geojson);
+  }catch(e){alert('Алдаа: '+e.message);}
+  hideLoader();
+}
+
+// ── Add layer ──────────────────────────────────────────────────────────────
+function addLayer(name,geojson){
+  const id='l'+Date.now();
+  const type=detectType(geojson);
+  const color=COLORS[layers.length%COLORS.length];
+  const style={mode:'single',color,strokeColor:'#ffffff',width:2,opacity:0.8,fillOpacity:0.5,labelField:'',labelSize:10,labelColor:'#ffffff',categories:{}};
+  const lyr=buildLeafletLayer(geojson,style,type,id);
+  lyr.addTo(map);
+  try{map.fitBounds(lyr.getBounds(),{padding:[20,20],maxZoom:12});}catch{}
+  layers.push({id,name,geojson,leafletLayer:lyr,style,visible:true,type});
+  renderLayerList();
+  selectLayer(id);
+}
+
+function detectType(geojson){
+  const t=(geojson.features[0]?.geometry?.type||'').toLowerCase();
+  if(t.includes('point'))return'point';
+  if(t.includes('line'))return'line';
+  return'polygon';
+}
+
+// ── Build Leaflet layer ────────────────────────────────────────────────────
+function buildLeafletLayer(geojson,style,type,id){
+  return L.geoJSON(geojson,{
+    style:f=>featureStyle(f,style,type),
+    pointToLayer:(f,ll)=>{
+      return L.circleMarker(ll,{
+        radius:style.width*3||6,
+        fillColor:getFeatureColor(f,style),
+        color:style.strokeColor||'#fff',
+        weight:1,opacity:style.opacity,fillOpacity:style.fillOpacity
+      });
+    },
+    onEachFeature:(f,lyr)=>{
+      lyr.on('click',()=>showAttr(f,id));
+      if(style.labelField&&f.properties[style.labelField]!=null){
+        lyr.bindTooltip(String(f.properties[style.labelField]),{
+          permanent:true,direction:'center',className:'lbl-tt',
+          offset:[0,0]
+        });
+      }
+    }
+  });
+}
+
+function featureStyle(f,style,type){
+  const c=getFeatureColor(f,style);
+  if(type==='line') return{color:c,weight:style.width||2,opacity:style.opacity||0.8};
+  return{fillColor:c,color:style.strokeColor||'#fff',weight:1,opacity:1,fillOpacity:style.fillOpacity||0.5};
+}
+
+function getFeatureColor(f,style){
+  if(style.mode==='categorized'&&style.catField&&f.properties){
+    const v=String(f.properties[style.catField]??'');
+    return style.categories[v]||style.color;
+  }
+  if(style.mode==='graduated'&&style.gradField&&f.properties){
+    const v=parseFloat(f.properties[style.gradField]);
+    if(!isNaN(v)) return gradColor(v,style.gradMin||0,style.gradMax||100,style.gradRamp||['#fee5d9','#e94560']);
+  }
+  return style.color;
+}
+
+function gradColor(val,min,max,ramp){
+  const t=Math.max(0,Math.min(1,(val-min)/(max-min||1)));
+  const c1=hexToRgb(ramp[0]),c2=hexToRgb(ramp[1]);
+  const r=Math.round(c1.r+(c2.r-c1.r)*t);
+  const g=Math.round(c1.g+(c2.g-c1.g)*t);
+  const b=Math.round(c1.b+(c2.b-c1.b)*t);
+  return`rgb(${r},${g},${b})`;
+}
+function hexToRgb(hex){
+  const r=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return r?{r:parseInt(r[1],16),g:parseInt(r[2],16),b:parseInt(r[3],16)}:{r:128,g:128,b:128};
+}
+
+// ── Rebuild layer ──────────────────────────────────────────────────────────
+function rebuildLayer(id){
+  const L_=layers.find(l=>l.id===id);if(!L_)return;
+  map.removeLayer(L_.leafletLayer);
+  L_.leafletLayer=buildLeafletLayer(L_.geojson,L_.style,L_.type,id);
+  if(L_.visible) L_.leafletLayer.addTo(map);
+  updateLegend();
+}
+
+// ── Layer list ─────────────────────────────────────────────────────────────
+function renderLayerList(){
+  const el=document.getElementById('layer-list');
+  el.innerHTML=layers.slice().reverse().map(l=>`
+    <div class="litem${l.id===selId?' active':''}" onclick="selectLayer('${l.id}')">
+      <div class="ldot" style="background:${l.style.color}"></div>
+      <span class="lname" title="${l.name}">${l.name}</span>
+      <div class="lact">
+        <button onclick="event.stopPropagation();toggleVis('${l.id}')" title="Харагдах/нуух">${l.visible?'👁':'🚫'}</button>
+        <button class="del" onclick="event.stopPropagation();deleteLayer('${l.id}')" title="Устгах">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function selectLayer(id){
+  selId=id;
+  renderLayerList();
+  renderStylePanel();
+  renderStats();
+  updateFilterFields();
+  updateChartFields();
+}
+
+function toggleVis(id){
+  const l=layers.find(x=>x.id===id);if(!l)return;
+  l.visible=!l.visible;
+  l.visible?l.leafletLayer.addTo(map):map.removeLayer(l.leafletLayer);
+  renderLayerList();
+}
+
+function deleteLayer(id){
+  const l=layers.find(x=>x.id===id);if(!l)return;
+  map.removeLayer(l.leafletLayer);
+  layers=layers.filter(x=>x.id!==id);
+  if(selId===id) selId=null;
+  renderLayerList();
+  renderStylePanel();
+  updateLegend();
+}
+
+// ── Style panel ────────────────────────────────────────────────────────────
+function renderStylePanel(){
+  const el=document.getElementById('style-panel');
+  const l=layers.find(x=>x.id===selId);
+  if(!l){el.innerHTML='<div style="font-size:9px;color:var(--text2);text-align:center;margin-top:12px">Давхарга сонгоно уу</div>';return;}
+  const fields=Object.keys(l.geojson.features[0]?.properties||{});
+  const numFields=fields.filter(f=>{const v=l.geojson.features.find(x=>x.properties[f]!=null)?.properties[f];return typeof v==='number'||!isNaN(parseFloat(v))});
+  const s=l.style;
+  el.innerHTML=`
+    <div style="font-size:9px;font-weight:600;color:var(--text1);margin-bottom:6px">${l.name}</div>
+    <div class="srow"><label class="slbl">Загварын горим</label>
+      <select onchange="setMode('${l.id}',this.value)">
+        <option value="single"${s.mode==='single'?' selected':''}>Нэгдмэл өнгө</option>
+        <option value="categorized"${s.mode==='categorized'?' selected':''}>Ангилалаар</option>
+        <option value="graduated"${s.mode==='graduated'?' selected':''}>Градиент (тоон)</option>
+      </select>
+    </div>
+
+    ${s.mode==='single'?`
+    <div class="srow"><label class="slbl">Өнгө</label>
+      <div class="row2">
+        <div class="color-chip" style="background:${s.color}"><input type="color" value="${s.color}" oninput="setSt('${l.id}','color',this.value)"></div>
+        <span>Дүүргэлт</span>
+        <input type="range" min="0" max="1" step="0.05" value="${s.fillOpacity}" oninput="setSt('${l.id}','fillOpacity',+this.value);this.nextElementSibling.textContent=Math.round(+this.value*100)+'%'">
+        <span>${Math.round(s.fillOpacity*100)}%</span>
+      </div>
+    </div>
+    <div class="srow"><label class="slbl">Хүрээний өнгө / зузаан</label>
+      <div class="row2">
+        <div class="color-chip" style="background:${s.strokeColor}"><input type="color" value="${s.strokeColor}" oninput="setSt('${l.id}','strokeColor',this.value)"></div>
+        <input type="range" min="0.5" max="8" step="0.5" value="${s.width}" oninput="setSt('${l.id}','width',+this.value);this.nextElementSibling.textContent=this.value+'px'">
+        <span>${s.width}px</span>
+      </div>
+    </div>
+    <div class="srow"><label class="slbl">Харагдалт</label>
+      <div class="row2">
+        <input type="range" min="0" max="1" step="0.05" value="${s.opacity}" oninput="setSt('${l.id}','opacity',+this.value);this.nextElementSibling.textContent=Math.round(+this.value*100)+'%'">
+        <span>${Math.round(s.opacity*100)}%</span>
+      </div>
+    </div>`:''}
+
+    ${s.mode==='categorized'?`
+    <div class="srow"><label class="slbl">Ангилах талбар</label>
+      <select onchange="setCatField('${l.id}',this.value)">
+        <option value="">— сонгох —</option>
+        ${fields.map(f=>`<option value="${f}"${s.catField===f?' selected':''}>${f}</option>`).join('')}
+      </select>
+    </div>
+    ${s.catField?`<div class="cat-list">${getCatValues(l).map(v=>`
+      <div class="cat-row">
+        <div class="color-chip" style="background:${s.categories[v]||'#888'}"><input type="color" value="${s.categories[v]||'#888888'}" oninput="setCatColor('${l.id}','${v}',this.value)"></div>
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px">${v||'(хоосон)'}</span>
+      </div>`).join('')}</div>`:''}
+    `:''}
+
+    ${s.mode==='graduated'?`
+    <div class="srow"><label class="slbl">Тоон талбар</label>
+      <select onchange="setGradField('${l.id}',this.value)">
+        <option value="">— сонгох —</option>
+        ${numFields.map(f=>`<option value="${f}"${s.gradField===f?' selected':''}>${f}</option>`).join('')}
+      </select>
+    </div>
+    <div class="srow"><label class="slbl">Эхний өнгө → Эцсийн өнгө</label>
+      <div class="row2">
+        <div class="color-chip" style="background:${(s.gradRamp||['#fee5d9','#e94560'])[0]}"><input type="color" value="${(s.gradRamp||['#fee5d9','#e94560'])[0]}" oninput="setGradRamp('${l.id}',0,this.value)"></div>
+        <span>→</span>
+        <div class="color-chip" style="background:${(s.gradRamp||['#fee5d9','#e94560'])[1]}"><input type="color" value="${(s.gradRamp||['#fee5d9','#e94560'])[1]}" oninput="setGradRamp('${l.id}',1,this.value)"></div>
+      </div>
+    </div>
+    `:''}
+
+    <div class="sep"></div>
+    <div class="srow"><label class="slbl">Шошго (аттрибутаас)</label>
+      <select onchange="setLabel('${l.id}',this.value)">
+        <option value="">— байхгүй —</option>
+        ${fields.map(f=>`<option value="${f}"${s.labelField===f?' selected':''}>${f}</option>`).join('')}
+      </select>
+    </div>
+    ${s.labelField?`
+    <div class="srow"><label class="slbl">Шошгоны өнгө / хэмжээ</label>
+      <div class="row2">
+        <div class="color-chip" style="background:${s.labelColor||'#fff'}"><input type="color" value="${s.labelColor||'#ffffff'}" oninput="setSt('${l.id}','labelColor',this.value);rebuildLayer('${l.id}')"></div>
+        <input type="range" min="8" max="18" value="${s.labelSize||10}" oninput="setSt('${l.id}','labelSize',+this.value);this.nextElementSibling.textContent=this.value+'px';rebuildLayer('${l.id}')">
+        <span>${s.labelSize||10}px</span>
+      </div>
+    </div>`:''}
+  `;
+}
+
+function setSt(id,key,val){
+  const l=layers.find(x=>x.id===id);if(!l)return;
+  l.style[key]=val;
+  rebuildLayer(id);
+  if(key==='color') renderLayerList();
+}
+function setMode(id,mode){
+  const l=layers.find(x=>x.id===id);if(!l)return;
+  l.style.mode=mode;renderStylePanel();rebuildLayer(id);
+}
+function setCatField(id,field){
+  const l=layers.find(x=>x.id===id);if(!l)return;
+  l.style.catField=field;
+  const vals=getCatValues(l);
+  vals.forEach((v,i)=>{if(!l.style.categories[v]) l.style.categories[v]=COLORS[i%COLORS.length];});
+  renderStylePanel();rebuildLayer(id);
+}
+function setCatColor(id,val,color){
+  const l=layers.find(x=>x.id===id);if(!l)return;
+  l.style.categories[val]=color;rebuildLayer(id);
+}
+function getCatValues(l){
+  const f=l.style.catField;if(!f)return[];
+  return[...new Set(l.geojson.features.map(x=>String(x.properties?.[f]??'')))].slice(0,20);
+}
+function setGradField(id,field){
+  const l=layers.find(x=>x.id===id);if(!l)return;
+  l.style.gradField=field;
+  if(field){
+    const vals=l.geojson.features.map(f=>parseFloat(f.properties?.[field])).filter(v=>!isNaN(v));
+    l.style.gradMin=Math.min(...vals);l.style.gradMax=Math.max(...vals);
+  }
+  renderStylePanel();rebuildLayer(id);
+}
+function setGradRamp(id,idx,color){
+  const l=layers.find(x=>x.id===id);if(!l)return;
+  if(!l.style.gradRamp) l.style.gradRamp=['#fee5d9','#e94560'];
+  l.style.gradRamp[idx]=color;rebuildLayer(id);
+}
+function setLabel(id,field){
+  const l=layers.find(x=>x.id===id);if(!l)return;
+  l.style.labelField=field;renderStylePanel();rebuildLayer(id);
+}
+
+// ── Tooltip CSS ────────────────────────────────────────────────────────────
+const ttStyle=document.createElement('style');
+ttStyle.textContent='.lbl-tt{background:transparent!important;border:none!important;box-shadow:none!important;font-family:"Montserrat",sans-serif!important;font-size:10px!important;color:#fff!important;text-shadow:0 0 3px #000,0 0 2px #000!important;font-weight:600!important;padding:0!important;white-space:nowrap!important;pointer-events:none!important}.leaflet-tooltip-top.lbl-tt::before{display:none!important}';
+document.head.appendChild(ttStyle);
+
+// ── Legend ─────────────────────────────────────────────────────────────────
+function updateLegend(){
+  const el=document.getElementById('legend-rows');
+  el.innerHTML=layers.filter(l=>l.visible).map(l=>{
+    const sym=l.type==='point'?`<div class="leg-sym pt" style="background:${l.style.color}"></div>`
+      :`<div class="leg-sym" style="background:${l.style.color};height:${l.type==='line'?'2px':'8px'}"></div>`;
+    return`<div class="leg-row">${sym}<span>${l.name}</span></div>`;
+  }).join('');
+}
+
+// ── Stats ──────────────────────────────────────────────────────────────────
+function renderStats(){
+  const el=document.getElementById('stat-grid');
+  const l=layers.find(x=>x.id===selId);
+  if(!l){el.innerHTML='<div style="font-size:9px;color:var(--text2);text-align:center;padding:12px;grid-column:1/-1">Давхарга сонгоно уу</div>';return;}
+  const feats=l.geojson.features;
+  const count=feats.length;
+  const numFields=Object.keys(feats[0]?.properties||{}).filter(f=>{const v=feats.find(x=>x.properties[f]!=null)?.properties[f];return typeof v==='number'||!isNaN(parseFloat(v))});
+  let extra='';
+  if(numFields[0]){
+    const vals=feats.map(f=>parseFloat(f.properties[numFields[0]])).filter(v=>!isNaN(v));
+    const sum=vals.reduce((a,b)=>a+b,0);
+    const avg=sum/vals.length;
+    extra=`<div class="stat-card"><div class="stat-val">${fmtNum(sum)}</div><div class="stat-lbl">${numFields[0]} нийлбэр</div></div>
+            <div class="stat-card"><div class="stat-val">${fmtNum(avg,1)}</div><div class="stat-lbl">${numFields[0]} дундаж</div></div>`;
+  }
+  el.innerHTML=`<div class="stat-card"><div class="stat-val">${count.toLocaleString()}</div><div class="stat-lbl">Нийт feature</div></div>
+    <div class="stat-card"><div class="stat-val">${Object.keys(feats[0]?.properties||{}).length}</div><div class="stat-lbl">Аттрибут талбар</div></div>
+    ${extra}`;
+}
+function fmtNum(n,d=0){return isNaN(n)?'—':Number(n.toFixed(d)).toLocaleString();}
+
+// ── Attribute panel ────────────────────────────────────────────────────────
+function showAttr(feature,layerId){
+  switchTab('attr',document.querySelectorAll('.tab')[2]);
+  const props=feature.properties||{};
+  const rows=Object.entries(props).map(([k,v])=>`<tr><td>${k}</td><td>${v??'—'}</td></tr>`).join('');
+  document.getElementById('attr-panel').innerHTML=`<table class="attr-tbl"><tbody>${rows}</tbody></table>`;
+}
+
+// ── Chart ──────────────────────────────────────────────────────────────────
+function updateChartFields(){
+  const l=layers.find(x=>x.id===selId);
+  const sel=document.getElementById('chart-field');
+  sel.innerHTML='<option value="">— сонгох —</option>';
+  if(!l)return;
+  const fields=Object.keys(l.geojson.features[0]?.properties||{});
+  fields.forEach(f=>{const o=document.createElement('option');o.value=f;o.textContent=f;sel.appendChild(o);});
+}
+function renderChart(){
+  const l=layers.find(x=>x.id===selId);if(!l)return;
+  const field=document.getElementById('chart-field').value;
+  const type=document.getElementById('chart-type').value;
+  if(!field)return;
+  const vals=l.geojson.features.map(f=>String(f.properties?.[field]??''));
+  const counts={};
+  vals.forEach(v=>{counts[v]=(counts[v]||0)+1;});
+  const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,15);
+  const labels=sorted.map(x=>x[0]);
+  const data=sorted.map(x=>x[1]);
+  const ctx=document.getElementById('chart-canvas').getContext('2d');
+  if(chartInst) chartInst.destroy();
+  chartInst=new Chart(ctx,{
+    type,
+    data:{labels,datasets:[{data,backgroundColor:COLORS.slice(0,labels.length),borderWidth:0}]},
+    options:{
+      responsive:true,plugins:{legend:{display:type==='pie',labels:{color:'#c9d1d9',font:{family:'Montserrat',size:9},padding:6}}},
+      scales:type==='bar'?{x:{ticks:{color:'#8b949e',font:{size:8}},grid:{color:'#30363d'}},y:{ticks:{color:'#8b949e',font:{size:8}},grid:{color:'#30363d'}}}:{}
+    }
+  });
+}
+
+// ── Filter ─────────────────────────────────────────────────────────────────
+function updateFilterFields(){
+  const l=layers.find(x=>x.id===selId);
+  const sel=document.getElementById('f-field');
+  sel.innerHTML='';
+  if(!l)return;
+  Object.keys(l.geojson.features[0]?.properties||{}).forEach(f=>{
+    const o=document.createElement('option');o.value=f;o.textContent=f;sel.appendChild(o);
+  });
+}
+function applyFilter(){
+  const l=layers.find(x=>x.id===selId);if(!l)return;
+  const field=document.getElementById('f-field').value;
+  const op=document.getElementById('f-op').value;
+  const val=document.getElementById('f-val').value;
+  map.removeLayer(l.leafletLayer);
+  const filtered={...l.geojson,features:l.geojson.features.filter(f=>{
+    const v=f.properties?.[field];
+    const vs=String(v??'');const vn=parseFloat(v);
+    if(op==='=') return vs===val||vn===parseFloat(val);
+    if(op==='!=') return vs!==val;
+    if(op==='>') return vn>parseFloat(val);
+    if(op==='<') return vn<parseFloat(val);
+    if(op==='агуулна') return vs.includes(val);
+    return true;
+  })};
+  l.leafletLayer=buildLeafletLayer(filtered,l.style,l.type,l.id);
+  if(l.visible) l.leafletLayer.addTo(map);
+  document.getElementById('filter-result').textContent=`${filtered.features.length} / ${l.geojson.features.length} feature`;
+  filterActive=true;
+}
+function clearFilter(){
+  const l=layers.find(x=>x.id===selId);if(!l)return;
+  map.removeLayer(l.leafletLayer);
+  l.leafletLayer=buildLeafletLayer(l.geojson,l.style,l.type,l.id);
+  if(l.visible) l.leafletLayer.addTo(map);
+  document.getElementById('filter-result').textContent='';
+  filterActive=false;
+}
+
+// ── Tab switch ──────────────────────────────────────────────────────────────
+function switchTab(name,el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('pane-'+name).classList.add('active');
+  if(name==='chart') renderChart();
+}
+
+// ── Export PNG ─────────────────────────────────────────────────────────────
+async function exportPng(){
+  showLoader('PNG үүсгэж байна...');
+  try{
+    const el=document.getElementById('map-wrap');
+    const canvas=await html2canvas(el,{useCORS:true,allowTaint:true,scale:2,backgroundColor:'#0d1117',logging:false});
+    const a=document.createElement('a');
+    a.download=(document.getElementById('map-title').value||'map')+'.png';
+    a.href=canvas.toDataURL('image/png');a.click();
+  }catch(e){alert('PNG алдаа: '+e.message);}
+  hideLoader();
+}
+
+// ── Export PDF ─────────────────────────────────────────────────────────────
+async function exportPdf(){
+  showLoader('PDF үүсгэж байна...');
+  try{
+    const el=document.getElementById('map-wrap');
+    const canvas=await html2canvas(el,{useCORS:true,allowTaint:true,scale:2,backgroundColor:'#0d1117',logging:false});
+    const img=canvas.toDataURL('image/jpeg',0.92);
+    const {jsPDF}=window.jspdf;
+    const pdf=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+    const pw=pdf.internal.pageSize.getWidth();
+    const ph=pdf.internal.pageSize.getHeight();
+    const title=document.getElementById('map-title').value||'Газрын зураг';
+    pdf.setFillColor(13,17,23);pdf.rect(0,0,pw,ph,'F');
+    pdf.setFont('helvetica','bold');pdf.setFontSize(11);pdf.setTextColor(230,237,243);
+    pdf.text(title,pw/2,10,{align:'center'});
+    const iw=pw-16;const ih=ph-20;
+    pdf.addImage(img,'JPEG',8,14,iw,ih);
+    pdf.setFontSize(7);pdf.setTextColor(139,148,158);
+    pdf.text('Монгол топо зурагч • topo-map.pages.dev',pw/2,ph-2,{align:'center'});
+    pdf.save(title+'.pdf');
+  }catch(e){alert('PDF алдаа: '+e.message);}
+  hideLoader();
+}
+
+// ── Loader ─────────────────────────────────────────────────────────────────
+function showLoader(msg){
+  document.getElementById('loader-msg').textContent=msg||'...';
+  document.getElementById('loader').classList.remove('hidden');
+}
+function hideLoader(){document.getElementById('loader').classList.add('hidden');}
+
+// Init
+hideLoader();
+</script>
+</body>
+</html>
