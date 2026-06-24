@@ -250,7 +250,7 @@ html,body{height:100%;font-family:'Montserrat',sans-serif;font-size:11px;backgro
     </div>
     <div id="drop-zone" onclick="document.getElementById('shp-input').click()">
       <input id="shp-input" type="file" multiple webkitdirectory accept=".shp,.dbf,.prj,.shx,.cpg">
-      📂 SHP фолдер дуслуулах / дарах
+      📂 Shapefile фолдероо чирэх / дарах
     </div>
     <div id="layer-list"></div>
     <div class="sep" style="margin:0"></div>
@@ -519,14 +519,23 @@ function rebuildLayer(id){
 function renderLayerList(){
   const el=document.getElementById('layer-list');
   el.innerHTML=layers.slice().reverse().map(l=>`
-    <div class="litem${l.id===selId?' active':''}" onclick="selectLayer('${l.id}')">
+    <div class="litem${l.id===selId?' active':''}" data-id="${l.id}">
       <div class="ldot" style="background:${l.style.color}"></div>
       <span class="lname" title="${l.name}">${l.name}</span>
       <div class="lact">
-        <button onclick="event.stopPropagation();toggleVis('${l.id}')" title="Харагдах/нуух">${l.visible?'👁':'🚫'}</button>
-        <button class="del" onclick="event.stopPropagation();deleteLayer('${l.id}')" title="Устгах">✕</button>
+        <button class="vis-btn" data-id="${l.id}" title="Харагдах/нуух">${l.visible?'👁':'🚫'}</button>
+        <button class="del" data-id="${l.id}" title="Устгах">✕</button>
       </div>
     </div>`).join('');
+  el.querySelectorAll('.litem').forEach(item=>{
+    item.addEventListener('click',()=>selectLayer(item.dataset.id));
+  });
+  el.querySelectorAll('.vis-btn').forEach(btn=>{
+    btn.addEventListener('click',e=>{e.stopPropagation();toggleVis(btn.dataset.id);});
+  });
+  el.querySelectorAll('.del').forEach(btn=>{
+    btn.addEventListener('click',e=>{e.stopPropagation();deleteLayer(btn.dataset.id);});
+  });
 }
 
 function selectLayer(id){
