@@ -121,6 +121,14 @@
     .shp-status { font-size: 0.68rem; color: #7a8a9a; padding: 4px 14px 6px; }
     .shp-status.err { color: #e94560; }
     .no-layers { padding: 10px 14px; font-size: 0.75rem; color: #7a8a9a; }
+    .btn-garmin-dl {
+      display: block; margin: 6px 14px 4px;
+      background: #0a2010; border: 1px solid #39d98a; color: #39d98a;
+      padding: 9px 14px; border-radius: 6px; cursor: pointer; font-size: 0.8rem;
+      text-align: center; transition: background .15s; text-decoration: none;
+      font-weight: 600;
+    }
+    .btn-garmin-dl:hover { background: #1a4020; }
     .btn-gpx {
       display: block; width: calc(100% - 28px); margin: 0 14px 10px;
       background: #0a2010; border: 1px solid #39d98a; color: #39d98a;
@@ -266,24 +274,25 @@
     <div id="shp-list"></div>
   </div>
 
-  <div class="upload-section">
-    <div class="upload-section-head">Шинэ давхарга нэмэх</div>
-    <div class="drop-zone" id="drop-zone">
-      <input type="file" id="shp-file-input" multiple accept=".shp,.dbf,.prj,.shx,.cpg" webkitdirectory />
-      <div class="drop-icon">📂</div>
-      <div class="drop-text">
-        <b>Shapefile фолдероо дуслуулах</b><br>
-        эсвэл дарж сонгох<br>
-        <small>Фолдерын нэр = давхаргын нэр</small>
-      </div>
+  <div class="lsection">
+    <div class="lsection-head">Garmin цаг руу татах</div>
+    <div style="padding:10px 14px 4px;font-size:0.76rem;color:#a0b0c0;line-height:1.5">
+      Топографийн зургийг Garmin цагандаа суулгаж ашиглах боломжтой.<br>
+      <b>BirdsEye (.jnx)</b> — Зурагт суулгасны дараа Garmin Explore апп-аас харна.
     </div>
-    <div class="upload-name-row">
-      <input type="text" id="layer-name-input" placeholder="Давхаргын нэр..." />
-      <button class="btn-upload" id="btn-do-upload" disabled>Upload</button>
+    <a class="btn-garmin-dl"
+       href="https://pub-2d7bdb113e09406eab77dc06705c4461.r2.dev/downloads/topo_garmin.jnx"
+       download="topo_garmin.jnx">
+      ⬇ Топо зураг татах (JNX · ~289 MB)
+    </a>
+    <div style="padding:4px 14px 10px;font-size:0.68rem;color:#7a8a9a">
+      Суулгах зааврыг <a href="#" id="jnx-help-toggle" style="color:#39d98a">эндээс</a> уншина уу.
     </div>
-    <div class="upload-status" id="upload-status"></div>
-    <div class="upload-progress" id="upload-progress">
-      <div class="upload-progress-bar" id="upload-progress-bar"></div>
+    <div id="jnx-help" style="display:none;padding:0 14px 12px;font-size:0.73rem;color:#a0b0c0;line-height:1.6">
+      1. Файлыг татаж авна<br>
+      2. Garmin-г USB-ээр компьютерт холбоно<br>
+      3. <code style="background:#1a2a1a;padding:1px 4px;border-radius:3px">/GARMIN/BirdsEye/</code> хавтсанд хуулна<br>
+      4. Цагнаасаа Map → BirdsEye сонгоно
     </div>
   </div>
 </div>
@@ -364,6 +373,12 @@ document.getElementById('btn-topo').addEventListener('click', () => {
 const INFO = { west:87.712, south:41.333, east:120.000, north:52.000, width:322880, height:106669 };
 document.getElementById('btn-fit').addEventListener('click', () => {
   map.fitBounds([[INFO.south, INFO.west],[INFO.north, INFO.east]], { maxZoom:8, animate:false, padding:[10,10] });
+});
+
+document.getElementById('jnx-help-toggle').addEventListener('click', e => {
+  e.preventDefault();
+  const el = document.getElementById('jnx-help');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
 });
 
 // ── Default colors ────────────────────────────────────────────────────
