@@ -306,11 +306,11 @@ L.control.attribution({prefix:false}).addTo(map);
 L.control.scale({imperial:false,position:'bottomleft'}).addTo(map);
 
 const BASEMAPS = {
-  dark:      {url:'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', opts:{subdomains:'abcd',maxZoom:20}, opacity:0.5},
-  light:     {url:'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', opts:{subdomains:'abcd',maxZoom:20}, opacity:0.8},
-  osm:       {url:'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', opts:{subdomains:'abc',maxZoom:19}, opacity:0.9},
-  satellite: {url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', opts:{maxZoom:19}, opacity:1},
-  terrain:   {url:'https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png', opts:{maxZoom:18}, opacity:0.9},
+  dark:      {url:'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', opts:{subdomains:'abcd',maxZoom:20,crossOrigin:true}, opacity:0.5},
+  light:     {url:'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', opts:{subdomains:'abcd',maxZoom:20,crossOrigin:true}, opacity:0.8},
+  osm:       {url:'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', opts:{subdomains:'abc',maxZoom:19,crossOrigin:true}, opacity:0.9},
+  satellite: {url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', opts:{maxZoom:19,crossOrigin:true}, opacity:1},
+  terrain:   {url:'https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png', opts:{maxZoom:18,crossOrigin:true}, opacity:0.9},
 };
 let baseLayer = L.tileLayer(BASEMAPS.dark.url,{...BASEMAPS.dark.opts,opacity:BASEMAPS.dark.opacity}).addTo(map);
 
@@ -334,7 +334,7 @@ function toggleTopo(){
     btn.style.background = '';
   } else {
     if(!topoLayer) topoLayer = L.tileLayer(`${R2}/tiles/{z}/{x}/{y}.png`,{
-      tms:true, maxNativeZoom:11, maxZoom:14, opacity:0.85,
+      tms:true, maxNativeZoom:11, maxZoom:14, opacity:0.85, crossOrigin:true,
       errorTileUrl:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
     });
     topoLayer.addTo(map);
@@ -810,20 +810,31 @@ async function exportPdf(){
   showLoader('PDF үүсгэж байна...');
   try{
     const el=document.getElementById('map-wrap');
-    const canvas=await html2canvas(el,{useCORS:true,allowTaint:true,scale:2,backgroundColor:'#0d1117',logging:false});
-    const img=canvas.toDataURL('image/jpeg',0.92);
+    // Tile-уудыг дахин ачаалах хугацаа өгнө
+    await new Promise(r=>setTimeout(r,600));
+    const canvas=await html2canvas(el,{
+      useCORS:true, allowTaint:false, scale:2,
+      backgroundColor:'#0d1117', logging:false,
+      imageTimeout:8000, removeContainer:true
+    });
     const {jsPDF}=window.jspdf;
+    const pw=297, ph=210; // A4 landscape mm
     const pdf=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
-    const pw=pdf.internal.pageSize.getWidth();
-    const ph=pdf.internal.pageSize.getHeight();
     const title=document.getElementById('map-title').value||'Газрын зураг';
-    pdf.setFillColor(13,17,23);pdf.rect(0,0,pw,ph,'F');
-    pdf.setFont('helvetica','bold');pdf.setFontSize(11);pdf.setTextColor(230,237,243);
-    pdf.text(title,pw/2,10,{align:'center'});
-    const iw=pw-16;const ih=ph-20;
-    pdf.addImage(img,'JPEG',8,14,iw,ih);
-    pdf.setFontSize(7);pdf.setTextColor(139,148,158);
-    pdf.text('Монгол топо зурагч • topo-map.pages.dev',pw/2,ph-2,{align:'center'});
+    // Дэвсгэр
+    pdf.setFillColor(13,17,23);
+    pdf.rect(0,0,pw,ph,'F');
+    // Гарчиг
+    pdf.setFont('helvetica','bold');pdf.setFontSize(10);
+    pdf.setTextColor(230,237,243);
+    pdf.text(title,pw/2,7,{align:'center'});
+    // Зураг — canvas-г PNG болгон (JPEG-ээс чанар сайн)
+    const imgData=canvas.toDataURL('image/png');
+    const iw=pw-16; const ih=ph-16;
+    pdf.addImage(imgData,'PNG',8,10,iw,ih,'','FAST');
+    // Footer
+    pdf.setFontSize(6);pdf.setTextColor(100,110,120);
+    pdf.text('topo-map.pages.dev',pw-4,ph-2,{align:'right'});
     pdf.save(title+'.pdf');
   }catch(e){alert('PDF алдаа: '+e.message);}
   hideLoader();
