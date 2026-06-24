@@ -795,17 +795,21 @@ function switchTab(name,el){
 async function captureMap(){
   const container=map.getContainer();
   const w=container.clientWidth, h=container.clientHeight;
-  const scale=2;
+  const PX=2; // retina scale
   const canvas=document.createElement('canvas');
-  canvas.width=w*scale; canvas.height=h*scale;
+  canvas.width=w*PX; canvas.height=h*PX;
   const ctx=canvas.getContext('2d');
-  ctx.scale(scale,scale);
+  ctx.scale(PX,PX);
 
   // Background
   ctx.fillStyle='#1a1a2e';
   ctx.fillRect(0,0,w,h);
 
-  // Draw tile layers using Leaflet's internal _tiles map
+  // Clip all rendering to map container bounds
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0,0,w,h); ctx.clip();
+
+  // 1. Tile layers — read Leaflet's internal _tiles cache
   const panePos=map._getMapPanePos();
   map.eachLayer(layer=>{
     if(!(layer instanceof L.TileLayer)||!layer._tiles) return;
@@ -821,19 +825,20 @@ async function captureMap(){
     ctx.globalAlpha=1;
   });
 
-  // Draw SVG vector layers (GeoJSON) via XMLSerializer
+  // 2. SVG vector overlay (GeoJSON) — serialize and draw at screen-correct offset
+  const cRect=container.getBoundingClientRect();
   const overlayPane=container.querySelector('.leaflet-overlay-pane');
   if(overlayPane){
     for(const svgEl of overlayPane.querySelectorAll('svg')){
       const rect=svgEl.getBoundingClientRect();
-      const cRect=container.getBoundingClientRect();
+      const dx=rect.left-cRect.left, dy=rect.top-cRect.top;
       const xml=new XMLSerializer().serializeToString(svgEl);
       const blob=new Blob([xml],{type:'image/svg+xml'});
       const url=URL.createObjectURL(blob);
       await new Promise(res=>{
         const img=new Image();
         img.onload=()=>{
-          ctx.drawImage(img, rect.left-cRect.left, rect.top-cRect.top, rect.width, rect.height);
+          ctx.drawImage(img, dx, dy, rect.width, rect.height);
           URL.revokeObjectURL(url); res();
         };
         img.onerror=()=>{ URL.revokeObjectURL(url); res(); };
@@ -841,6 +846,55 @@ async function captureMap(){
       });
     }
   }
+  ctx.restore();
+
+  // 3. Title bar (drawn on canvas — avoids Cyrillic encoding issues in PDF)
+  const title=document.getElementById('map-title').value||'';
+  if(title){
+    ctx.font='bold 14px Montserrat,sans-serif';
+    const tw=ctx.measureText(title).width+24;
+    const tx=(w-tw)/2, ty=8;
+    ctx.fillStyle='rgba(0,0,0,0.6)';
+    ctx.beginPath();
+    ctx.roundRect(tx,ty,tw,26,4);
+    ctx.fill();
+    ctx.fillStyle='#e6edf3';
+    ctx.textAlign='center';
+    ctx.fillText(title, w/2, ty+18);
+  }
+
+  // 4. Legend (bottom-right)
+  const legRows=document.querySelectorAll('#legend-rows .leg-row');
+  if(legRows.length){
+    const pad=8, rowH=16, boxW=110;
+    const lx=w-boxW-10, ly=h-legRows.length*rowH-pad*2-24;
+    ctx.fillStyle='rgba(0,0,0,0.55)';
+    ctx.beginPath();
+    ctx.roundRect(lx,ly,boxW,legRows.length*rowH+pad*2+20,4);
+    ctx.fill();
+    ctx.fillStyle='#ccc'; ctx.font='bold 9px Montserrat,sans-serif'; ctx.textAlign='left';
+    ctx.fillText('ТАЙЛБАР', lx+pad, ly+pad+9);
+    legRows.forEach((row,i)=>{
+      const chip=row.querySelector('.leg-chip');
+      const label=row.querySelector('span:last-child');
+      if(!chip||!label) return;
+      const color=chip.style.background||'#3b82f6';
+      const ry=ly+pad+20+i*rowH;
+      ctx.fillStyle=color;
+      ctx.fillRect(lx+pad, ry, 10, 10);
+      ctx.fillStyle='#ddd'; ctx.font='9px Montserrat,sans-serif';
+      ctx.fillText(label.textContent.trim().slice(0,16), lx+pad+14, ry+9);
+    });
+  }
+
+  // 5. North arrow
+  ctx.font='bold 16px sans-serif';
+  ctx.textAlign='center';
+  ctx.fillStyle='rgba(0,0,0,0.5)';
+  ctx.beginPath(); ctx.arc(w-24,24,14,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#fff';
+  ctx.fillText('⬆', w-24, 30);
+
   return canvas;
 }
 
@@ -862,20 +916,22 @@ async function exportPdf(){
   try{
     const canvas=await captureMap();
     const {jsPDF}=window.jspdf;
-    const pw=297, ph=210; // A4 landscape mm
+    const pw=297, ph=210;
     const pdf=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
-    const title=document.getElementById('map-title').value||'Газрын зураг';
-    pdf.setFillColor(13,17,23);
+    // Dark background
+    pdf.setFillColor(26,26,46);
     pdf.rect(0,0,pw,ph,'F');
-    pdf.setFont('helvetica','bold');pdf.setFontSize(10);
-    pdf.setTextColor(230,237,243);
-    pdf.text(title,pw/2,7,{align:'center'});
+    // Fit canvas image into page keeping aspect ratio
+    const cw=canvas.width/2, ch=canvas.height/2; // undo PX scale for mm calc
+    const ratio=Math.min((pw-8)/cw, (ph-8)/ch);
+    const iw=cw*ratio, ih=ch*ratio;
+    const ox=(pw-iw)/2, oy=(ph-ih)/2;
     const imgData=canvas.toDataURL('image/png');
-    const iw=pw-16; const ih=ph-16;
-    pdf.addImage(imgData,'PNG',8,10,iw,ih,'','FAST');
-    pdf.setFontSize(6);pdf.setTextColor(100,110,120);
-    pdf.text('topo-map.pages.dev',pw-4,ph-2,{align:'right'});
-    pdf.save(title+'.pdf');
+    pdf.addImage(imgData,'PNG',ox,oy,iw,ih,'','FAST');
+    pdf.setFontSize(5);pdf.setTextColor(100,110,120);
+    pdf.text('topo-map.pages.dev',pw-3,ph-2,{align:'right'});
+    const fname=(document.getElementById('map-title').value||'map')+'.pdf';
+    pdf.save(fname);
   }catch(e){alert('PDF алдаа: '+e.message);}
   hideLoader();
 }
