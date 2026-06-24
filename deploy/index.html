@@ -121,6 +121,13 @@
     .shp-status { font-size: 0.68rem; color: #7a8a9a; padding: 4px 14px 6px; }
     .shp-status.err { color: #e94560; }
     .no-layers { padding: 10px 14px; font-size: 0.75rem; color: #7a8a9a; }
+    .btn-gpx {
+      display: block; width: calc(100% - 28px); margin: 0 14px 10px;
+      background: #0a2010; border: 1px solid #39d98a; color: #39d98a;
+      padding: 6px 10px; border-radius: 5px; cursor: pointer; font-size: 0.74rem;
+      text-align: center; transition: background .15s;
+    }
+    .btn-gpx:hover { background: #1a4020; }
 
     /* ── Upload zone ─────────────────────────────────── */
     .upload-section { border-top: 1px solid #1a3060; padding: 10px; }
@@ -394,6 +401,55 @@ function buildLeafletLayer(geojson, style, layerName) {
   });
 }
 
+// ── GeoJSON → GPX хөрвүүлэгч ─────────────────────────────────────────
+function geojsonToGpx(geojson, name) {
+  const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const pt  = ([lon, lat]) => `<trkpt lat="${lat}" lon="${lon}"></trkpt>`;
+
+  function coordsToSegs(coords, type) {
+    if (type === 'LineString')
+      return `<trkseg>${coords.map(pt).join('')}</trkseg>`;
+    if (type === 'MultiLineString')
+      return coords.map(seg => `<trkseg>${seg.map(pt).join('')}</trkseg>`).join('');
+    if (type === 'Polygon')
+      return `<trkseg>${coords[0].map(pt).join('')}</trkseg>`;
+    if (type === 'MultiPolygon')
+      return coords.map(poly => `<trkseg>${poly[0].map(pt).join('')}</trkseg>`).join('');
+    return '';
+  }
+
+  const wpts = [], trks = [];
+  (geojson.features || []).forEach((f, i) => {
+    if (!f.geometry) return;
+    const { type, coordinates } = f.geometry;
+    const fname = esc(f.properties?.NAME || f.properties?.name || `${name} ${i+1}`);
+    if (type === 'Point') {
+      wpts.push(`<wpt lat="${coordinates[1]}" lon="${coordinates[0]}"><name>${fname}</name></wpt>`);
+    } else {
+      const segs = coordsToSegs(coordinates, type);
+      if (segs) trks.push(`<trk><name>${fname}</name>${segs}</trk>`);
+    }
+  });
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Монголын Топо Зураг" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><name>${esc(name)}</name></metadata>
+  ${wpts.join('\n  ')}
+  ${trks.join('\n  ')}
+</gpx>`;
+}
+
+function downloadGpx(geojson, name) {
+  const gpx  = geojsonToGpx(geojson, name);
+  const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = name.replace(/[/\\?%*:|"<>]/g, '_') + '.gpx';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ── Shapefile layers — R2-с татна ─────────────────────────────────────
 let _shpLeafletLayers = [];  // map дээрх давхаргуудыг хянана
 
@@ -460,6 +516,7 @@ async function loadShapefileLayers() {
             <option value="dashdot">Тасархай-цэгэн</option>
           </select>
         </div>
+        <button class="btn-gpx" id="gpx-${id}" disabled>⬇ GPX татах (Garmin)</button>
       </div>`;
     list.appendChild(card);
     if (!ready) return;
@@ -500,6 +557,12 @@ async function loadShapefileLayers() {
       .then(geojson => {
         leafletLayer = buildLeafletLayer(geojson, style, name).addTo(map);
         _shpLeafletLayers.push(leafletLayer);
+        // GPX товч идэвхжүүлэх
+        const gpxBtn = document.getElementById(`gpx-${id}`);
+        if (gpxBtn) {
+          gpxBtn.disabled = false;
+          gpxBtn.addEventListener('click', () => downloadGpx(geojson, name));
+        }
       })
       .catch(e => { card.insertAdjacentHTML('beforeend', `<div class="shp-status err">Уншиж чадсангүй (${e.message})</div>`); });
   });
