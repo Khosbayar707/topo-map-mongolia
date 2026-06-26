@@ -417,8 +417,11 @@ document.getElementById('kmz-all-btn').addEventListener('click', e => {
       const a = document.createElement('a');
       a.href = `${R2_DL}/mongolia_topo_hd_part${i}.kmz`;
       a.download = `mongolia_topo_hd_part${i}.kmz`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
       a.click();
-    }, i * 800);
+      document.body.removeChild(a);
+    }, i * 1500);
   }
 });
 
