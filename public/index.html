@@ -271,6 +271,20 @@
   </div>
 
   <div class="lsection">
+    <div class="lsection-head">Ортофото зураг</div>
+    <div class="base-row">
+      <input type="checkbox" id="chk-ortho" />
+      <div class="swatch" style="background:linear-gradient(135deg,#4a7c59,#8fa68e)"></div>
+      <label for="chk-ortho">Ортофото</label>
+    </div>
+    <div class="slider-row" id="ortho-slider-row" style="display:none">
+      <span id="ortho-op-val">80</span>
+      <input type="range" id="opacity-ortho" min="0" max="100" value="80" />
+    </div>
+    <div id="ortho-status" style="font-size:0.7rem;color:#7a8a9a;padding:2px 14px 4px"></div>
+  </div>
+
+  <div class="lsection">
     <div class="lsection-head">Shapefile давхаргууд</div>
     <div id="shp-list"></div>
   </div>
@@ -335,7 +349,7 @@ const BASEMAPS = {
 };
 
 // ── Map ───────────────────────────────────────────────────────────────
-const map = L.map('map', { center:[47,104], zoom:8, minZoom:6, maxZoom:11, zoomControl:true });
+const map = L.map('map', { center:[47,104], zoom:8, minZoom:6, maxZoom:19, zoomControl:true });
 
 let currentBaseId = 'dark';
 let currentBaseLayer = L.tileLayer(BASEMAPS.dark.url, { ...BASEMAPS.dark.opts, opacity:0.3 }).addTo(map);
@@ -343,7 +357,7 @@ let currentBaseLayer = L.tileLayer(BASEMAPS.dark.url, { ...BASEMAPS.dark.opts, o
 // Топо зураг — R2-с шууд (TMS y convention)
 const topoLayer = L.tileLayer(`${R2}/tiles/{z}/{x}/{y}.png`, {
   attribution: 'Топографийн зураг 1:200,000',
-  maxNativeZoom: 11, maxZoom: 11, opacity: 1.0,
+  maxNativeZoom: 11, maxZoom: 19, opacity: 1.0,
   tms: true,
   errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
 }).addTo(map);
@@ -417,9 +431,40 @@ document.getElementById('kmz-all-btn').addEventListener('click', e => {
       const a = document.createElement('a');
       a.href = `${R2_DL}/mongolia_topo_hd_part${i}.kmz`;
       a.download = `mongolia_topo_hd_part${i}.kmz`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
       a.click();
-    }, i * 800);
+      document.body.removeChild(a);
+    }, i * 1500);
   }
+});
+
+// ── Ортофото (XYZ tiles from R2) ─────────────────────────────────────
+const ORTHO_TILE_URL = 'https://pub-2d7bdb113e09406eab77dc06705c4461.r2.dev/orthophoto/tiles/{z}/{x}/{y}.png';
+const chkOrtho      = document.getElementById('chk-ortho');
+const orthoSliderRow = document.getElementById('ortho-slider-row');
+const orthoOpVal    = document.getElementById('ortho-op-val');
+const orthoOpSlider = document.getElementById('opacity-ortho');
+
+const orthoLayer = L.tileLayer(ORTHO_TILE_URL, {
+  minZoom: 14, maxZoom: 19,
+  opacity: 0.8,
+  tms: true,
+  attribution: 'Ортофото © Тувшин',
+});
+
+chkOrtho.addEventListener('change', () => {
+  if (chkOrtho.checked) {
+    orthoLayer.addTo(map);
+    orthoSliderRow.style.display = '';
+  } else {
+    map.removeLayer(orthoLayer);
+  }
+});
+
+orthoOpSlider.addEventListener('input', () => {
+  orthoOpVal.textContent = orthoOpSlider.value;
+  orthoLayer.setOpacity(orthoOpSlider.value / 100);
 });
 
 // ── Default colors ────────────────────────────────────────────────────
