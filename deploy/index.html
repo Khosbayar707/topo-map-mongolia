@@ -6,8 +6,6 @@
   <title>Топографийн зураг</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/georaster"></script>
-  <script src="https://unpkg.com/georaster-layer-for-leaflet"></script>
   <!-- shpjs + proj4 нь upload хийх үед л lazily ачаалагдана -->
   <script>
   function _loadScript(src) {
@@ -277,7 +275,7 @@
     <div class="base-row">
       <input type="checkbox" id="chk-ortho" />
       <div class="swatch" style="background:linear-gradient(135deg,#4a7c59,#8fa68e)"></div>
-      <label for="chk-ortho">Тувшин ортофото</label>
+      <label for="chk-ortho">Ортофото</label>
     </div>
     <div class="slider-row" id="ortho-slider-row" style="display:none">
       <span id="ortho-op-val">80</span>
@@ -441,50 +439,32 @@ document.getElementById('kmz-all-btn').addEventListener('click', e => {
   }
 });
 
-// ── Ортофото (COG via georaster-layer-for-leaflet) ───────────────────
-const ORTHO_URL = 'https://pub-2d7bdb113e09406eab77dc06705c4461.r2.dev/orthophoto/tuvshin_cog.tif';
-let orthoLayer = null;
-let orthoLoading = false;
-
-const chkOrtho   = document.getElementById('chk-ortho');
-const orthoStatus = document.getElementById('ortho-status');
+// ── Ортофото (XYZ tiles from R2) ─────────────────────────────────────
+const ORTHO_TILE_URL = 'https://pub-2d7bdb113e09406eab77dc06705c4461.r2.dev/orthophoto/tiles/{z}/{x}/{y}.png';
+const chkOrtho      = document.getElementById('chk-ortho');
 const orthoSliderRow = document.getElementById('ortho-slider-row');
-const orthoOpVal = document.getElementById('ortho-op-val');
+const orthoOpVal    = document.getElementById('ortho-op-val');
 const orthoOpSlider = document.getElementById('opacity-ortho');
 
-async function loadOrtho() {
-  if (orthoLayer) return;
-  if (orthoLoading) return;
-  orthoLoading = true;
-  orthoStatus.textContent = 'Ачаалж байна…';
-  try {
-    const georaster = await parseGeoraster(ORTHO_URL);
-    orthoLayer = new GeoRasterLayer({
-      georaster,
-      opacity: orthoOpSlider.value / 100,
-      resolution: 512,
-    });
-    orthoLayer.addTo(map);
-    orthoStatus.textContent = '';
-    orthoSliderRow.style.display = '';
-  } catch (err) {
-    orthoStatus.textContent = 'Алдаа: ' + err.message;
-    chkOrtho.checked = false;
-  }
-  orthoLoading = false;
-}
+const orthoLayer = L.tileLayer(ORTHO_TILE_URL, {
+  minZoom: 14, maxZoom: 19,
+  opacity: 0.8,
+  tms: false,
+  attribution: 'Ортофото © Тувшин',
+});
 
 chkOrtho.addEventListener('change', () => {
   if (chkOrtho.checked) {
-    loadOrtho().then(() => { if (orthoLayer) map.addLayer(orthoLayer); });
+    orthoLayer.addTo(map);
+    orthoSliderRow.style.display = '';
   } else {
-    if (orthoLayer) map.removeLayer(orthoLayer);
+    map.removeLayer(orthoLayer);
   }
 });
 
 orthoOpSlider.addEventListener('input', () => {
   orthoOpVal.textContent = orthoOpSlider.value;
-  if (orthoLayer) orthoLayer.setOpacity(orthoOpSlider.value / 100);
+  orthoLayer.setOpacity(orthoOpSlider.value / 100);
 });
 
 // ── Default colors ────────────────────────────────────────────────────
