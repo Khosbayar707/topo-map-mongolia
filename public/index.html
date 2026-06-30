@@ -349,7 +349,7 @@ const BASEMAPS = {
 };
 
 // ── Map ───────────────────────────────────────────────────────────────
-const map = L.map('map', { center:[47,104], zoom:8, minZoom:6, maxZoom:11, zoomControl:true });
+const map = L.map('map', { center:[47,104], zoom:8, minZoom:6, maxZoom:19, zoomControl:true });
 
 let currentBaseId = 'dark';
 let currentBaseLayer = L.tileLayer(BASEMAPS.dark.url, { ...BASEMAPS.dark.opts, opacity:0.3 }).addTo(map);
@@ -357,7 +357,7 @@ let currentBaseLayer = L.tileLayer(BASEMAPS.dark.url, { ...BASEMAPS.dark.opts, o
 // Топо зураг — R2-с шууд (TMS y convention)
 const topoLayer = L.tileLayer(`${R2}/tiles/{z}/{x}/{y}.png`, {
   attribution: 'Топографийн зураг 1:200,000',
-  maxNativeZoom: 11, maxZoom: 11, opacity: 1.0,
+  maxNativeZoom: 11, maxZoom: 19, opacity: 1.0,
   tms: true,
   errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
 }).addTo(map);
