@@ -8,7 +8,10 @@ export async function onRequestGet({ request, env, params }) {
     return new Response('Forbidden', { status: 403 });
   }
 
-  const key = 'geojson/' + (Array.isArray(params.path) ? params.path.join('/') : params.path);
+  // Кирилл нэртэй файлын path percent-encoded ирдэг тул decode хийнэ
+  let raw = Array.isArray(params.path) ? params.path.join('/') : params.path;
+  try { raw = decodeURIComponent(raw); } catch {}
+  const key = 'geojson/' + raw;
   const obj = await env.BUCKET.get(key);
   if (!obj) return new Response('Not found', { status: 404 });
 
