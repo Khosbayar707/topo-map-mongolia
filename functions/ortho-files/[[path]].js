@@ -8,10 +8,18 @@ function contentType(name) {
   return 'application/octet-stream';
 }
 
-export async function onRequestGet({ request, env, params }) {
+function isAllowed(request) {
   const ref = request.headers.get('Referer') || '';
-  const isLocal = ref.startsWith('http://localhost') || ref.startsWith('http://127.0.0.1');
-  if (!ALLOWED_REF.test(ref) && !isLocal) {
+  if (ALLOWED_REF.test(ref)) return true;
+  if (ref.startsWith('http://localhost') || ref.startsWith('http://127.0.0.1')) return true;
+  // Web Worker дотроос гарсан fetch Referer-гүй байж болно — browser автоматаар
+  // Sec-Fetch-Site илгээдэг (curl/wget/скрипт илгээдэггүй)
+  const sfs = request.headers.get('Sec-Fetch-Site') || '';
+  return sfs === 'same-origin' || sfs === 'same-site';
+}
+
+export async function onRequestGet({ request, env, params }) {
+  if (!isAllowed(request)) {
     return new Response('Forbidden', { status: 403 });
   }
 
