@@ -18,6 +18,29 @@ function isAllowed(request) {
   return sfs === 'same-origin' || sfs === 'same-site';
 }
 
+function keyOf(params) {
+  let raw = Array.isArray(params.path) ? params.path.join('/') : params.path;
+  try { raw = decodeURIComponent(raw); } catch {}
+  return raw;
+}
+
+// georaster нь url+'.ovr' байгаа эсэхийг HEAD-ээр шалгадаг. HEAD handler байхгүй
+// бол SPA fallback index.html-ийг 200-оор буцааж, байхгүй файлыг "байна" гэж
+// андууруулдаг тул HEAD-ийг зөв зохицуулах ёстой.
+export async function onRequestHead({ request, env, params }) {
+  if (!isAllowed(request)) return new Response(null, { status: 403 });
+  const raw = keyOf(params);
+  const head = await env.BUCKET.head('ortho/' + raw);
+  if (!head) return new Response(null, { status: 404 });
+  return new Response(null, {
+    headers: {
+      'Content-Type': contentType(raw),
+      'Content-Length': String(head.size),
+      'Accept-Ranges': 'bytes',
+    },
+  });
+}
+
 export async function onRequestGet({ request, env, params }) {
   if (!isAllowed(request)) {
     return new Response('Forbidden', { status: 403 });
