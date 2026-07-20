@@ -6,6 +6,7 @@
   <title>Ортофото зураг</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/geotiff"></script>
   <script src="https://unpkg.com/georaster"></script>
   <script src="https://unpkg.com/georaster-layer-for-leaflet"></script>
   <style>
@@ -96,6 +97,29 @@
 
     .hint { padding: 2px 14px 8px; font-size: 0.66rem; color: #5a6a7a; line-height: 1.5; }
 
+    #export-dlg {
+      position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
+      background: #16213e; border: 1px solid #0f3460; border-radius: 8px;
+      padding: 12px 14px; z-index: 2500; display: none; width: 280px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.5);
+    }
+    #export-dlg.on { display: block; }
+    .dlg-title { font-size: 0.78rem; color: #e94560; font-weight: 600; margin-bottom: 6px; }
+    .dlg-info { font-size: 0.7rem; color: #7a8a9a; margin-bottom: 6px; }
+    .dlg-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+    .dlg-row label { font-size: 0.7rem; color: #7a8a9a; width: 86px; flex-shrink: 0; }
+    .dlg-row select {
+      flex: 1; background: #0f2040; border: 1px solid #1a3060; color: #e0e0e0;
+      border-radius: 4px; padding: 4px 6px; font-size: 0.72rem;
+    }
+    .dlg-btns { display: flex; gap: 8px; margin-top: 10px; }
+    .dlg-btns button {
+      flex: 1; padding: 7px; border-radius: 4px; cursor: pointer; font-size: 0.74rem;
+      border: 1px solid #1a3060; background: #0f2040; color: #e0e0e0;
+    }
+    .dlg-btns button.primary { background: #0f3460; border-color: #e94560; }
+    .dlg-btns button.primary:hover { background: #e94560; }
+
     .loading-overlay {
       position: absolute; inset: 0; background: rgba(26,26,46,.6);
       display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 2000;
@@ -145,6 +169,29 @@
     <div class="spinner"></div>
     <div style="font-size:.85rem" id="loading-text">Ачаалж байна...</div>
   </div>
+  <div id="export-dlg">
+    <div class="dlg-title">✂ Сонгосон талбай татах</div>
+    <div class="dlg-info" id="dlg-info"></div>
+    <div class="dlg-row">
+      <label>Нарийвчлал</label>
+      <select id="export-res">
+        <option value="4096">Өндөр (4096px)</option>
+        <option value="2048" selected>Дунд (2048px)</option>
+        <option value="1024">Бага (1024px)</option>
+      </select>
+    </div>
+    <div class="dlg-row">
+      <label>Формат</label>
+      <select id="export-fmt">
+        <option value="tif" selected>GeoTIFF (солбицолтой)</option>
+        <option value="png">PNG (энгийн зураг)</option>
+      </select>
+    </div>
+    <div class="dlg-btns">
+      <button id="export-cancel">Болих</button>
+      <button class="primary" id="export-go">⬇ Татах</button>
+    </div>
+  </div>
 </div>
 
 <div id="panel">
@@ -156,6 +203,9 @@
     <div class="slider-row" id="op-row" style="display:none">
       <input type="range" id="op-slider" min="0" max="100" value="100" />
       <span id="op-val">100</span>
+    </div>
+    <div id="dl-row" style="display:none;padding:4px 14px 8px">
+      <button class="btn-full" id="area-btn">✂ Талбай сонгож татах</button>
     </div>
     <div class="status-line" id="view-status"></div>
   </div>
@@ -219,6 +269,7 @@ if (window.matchMedia('(max-width: 768px)').matches) {
 let orthoList = [];
 let curLayer = null;
 let curFile  = null;
+let curGeoraster = null;
 
 function fmtSize(b) {
   if (!b) return '';
@@ -273,8 +324,10 @@ async function viewOrtho(file) {
     curLayer = new GeoRasterLayer({ georaster, opacity: op, resolution: 128 });
     curLayer.addTo(map);
     curFile = file;
+    curGeoraster = georaster;
     map.fitBounds(curLayer.getBounds());
     document.getElementById('op-row').style.display = '';
+    document.getElementById('dl-row').style.display = '';
     document.querySelectorAll('.ortho-item').forEach(i =>
       i.classList.toggle('active', i.dataset.file === file));
   } catch (err) {
@@ -297,11 +350,152 @@ async function deleteOrtho(file) {
   }).then(r => r.json()).catch(e => ({ error: e.message }));
   if (res.error) { setViewStatus('Устгаж чадсангүй: ' + res.error, true); return; }
   if (file === curFile && curLayer) {
-    map.removeLayer(curLayer); curLayer = null; curFile = null;
+    map.removeLayer(curLayer); curLayer = null; curFile = null; curGeoraster = null;
     document.getElementById('op-row').style.display = 'none';
+    document.getElementById('dl-row').style.display = 'none';
+    cancelDraw();
   }
   loadList();
 }
+
+// ── Талбай сонгож татах ───────────────────────────────────────────────
+let drawMode = false, drawStart = null, drawRect = null;
+const areaBtn = document.getElementById('area-btn');
+const exportDlg = document.getElementById('export-dlg');
+
+function startDraw() {
+  drawMode = true;
+  areaBtn.textContent = '✋ Сонголт болих';
+  map.dragging.disable();
+  document.getElementById('map').style.cursor = 'crosshair';
+  setViewStatus('Газрын зураг дээр талбайгаа чирж сонгоно уу');
+  if (window.matchMedia('(max-width: 768px)').matches) {
+    document.getElementById('panel').classList.add('collapsed');
+  }
+}
+
+function cancelDraw() {
+  drawMode = false; drawStart = null;
+  if (drawRect) { map.removeLayer(drawRect); drawRect = null; }
+  map.dragging.enable();
+  document.getElementById('map').style.cursor = '';
+  areaBtn.textContent = '✂ Талбай сонгож татах';
+  exportDlg.classList.remove('on');
+  setViewStatus('');
+}
+
+areaBtn.addEventListener('click', () => { drawMode ? cancelDraw() : startDraw(); });
+document.getElementById('export-cancel').addEventListener('click', cancelDraw);
+
+map.on('mousedown', e => {
+  if (!drawMode) return;
+  if (drawRect) { map.removeLayer(drawRect); drawRect = null; exportDlg.classList.remove('on'); }
+  drawStart = e.latlng;
+  drawRect = L.rectangle(L.latLngBounds(e.latlng, e.latlng),
+    { color: '#e94560', weight: 2, fillOpacity: 0.08 }).addTo(map);
+});
+map.on('mousemove', e => {
+  if (!drawMode || !drawStart) return;
+  drawRect.setBounds(L.latLngBounds(drawStart, e.latlng));
+});
+map.on('mouseup', e => {
+  if (!drawMode || !drawStart) return;
+  drawRect.setBounds(L.latLngBounds(drawStart, e.latlng));
+  drawStart = null;
+  showExportDlg();
+});
+
+// Сонгосон талбайг georaster-ийн пикселийн цонх руу хөрвүүлнэ
+function pixelWindow() {
+  const g = curGeoraster, b = drawRect.getBounds();
+  const x0 = Math.max(0, Math.floor((b.getWest()  - g.xmin) / g.pixelWidth));
+  const x1 = Math.min(g.width,  Math.ceil((b.getEast()  - g.xmin) / g.pixelWidth));
+  const y0 = Math.max(0, Math.floor((g.ymax - b.getNorth()) / g.pixelHeight));
+  const y1 = Math.min(g.height, Math.ceil((g.ymax - b.getSouth()) / g.pixelHeight));
+  return { x0, x1, y0, y1, w: x1 - x0, h: y1 - y0 };
+}
+
+function showExportDlg() {
+  const win = pixelWindow();
+  if (win.w <= 0 || win.h <= 0) {
+    setViewStatus('Сонгосон талбай зургийн гадна байна', true);
+    map.removeLayer(drawRect); drawRect = null;
+    return;
+  }
+  document.getElementById('dlg-info').textContent =
+    `Талбай: ${win.w.toLocaleString()} × ${win.h.toLocaleString()} px (эх нарийвчлалаар)`;
+  exportDlg.classList.add('on');
+}
+
+function saveBlob(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+document.getElementById('export-go').addEventListener('click', async () => {
+  const g = curGeoraster;
+  if (!g || !drawRect) return;
+  const win = pixelWindow();
+  const maxDim = parseInt(document.getElementById('export-res').value, 10);
+  const fmt = document.getElementById('export-fmt').value;
+  const scale = Math.min(1, maxDim / Math.max(win.w, win.h));
+  const outW = Math.max(1, Math.round(win.w * scale));
+  const outH = Math.max(1, Math.round(win.h * scale));
+
+  const overlay = document.getElementById('loading');
+  overlay.classList.add('on');
+  document.getElementById('loading-text').textContent = `Зураг бэлтгэж байна (${outW}×${outH})…`;
+  try {
+    const values = await g.getValues({
+      left: win.x0, top: win.y0, right: win.x1, bottom: win.y1,
+      width: outW, height: outH, resampleMethod: 'bilinear',
+    });
+    const nBands = values.length;
+    const base = curFile.replace(/\.tiff?$/i, '');
+
+    if (fmt === 'png') {
+      const canvas = document.createElement('canvas');
+      canvas.width = outW; canvas.height = outH;
+      const ctx = canvas.getContext('2d');
+      const img = ctx.createImageData(outW, outH);
+      for (let y = 0; y < outH; y++) {
+        for (let x = 0; x < outW; x++) {
+          const i = (y * outW + x) * 4;
+          img.data[i]     = values[0][y][x];
+          img.data[i + 1] = (nBands > 1 ? values[1][y][x] : values[0][y][x]);
+          img.data[i + 2] = (nBands > 2 ? values[2][y][x] : values[0][y][x]);
+          img.data[i + 3] = (nBands > 3 ? values[3][y][x] : 255);
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+      canvas.toBlob(blob => saveBlob(blob, `${base}_crop.png`), 'image/png');
+    } else {
+      // GeoTIFF — солбицолын мэдээлэлтэй
+      const west  = g.xmin + win.x0 * g.pixelWidth;
+      const north = g.ymax - win.y0 * g.pixelHeight;
+      const pw = (win.w * g.pixelWidth)  / outW;
+      const ph = (win.h * g.pixelHeight) / outH;
+      const rgb = values.slice(0, Math.min(3, nBands));
+      const ab = GeoTIFF.writeArrayBuffer(rgb, {
+        height: outH, width: outW,
+        ModelPixelScale: [pw, ph, 0],
+        ModelTiepoint: [0, 0, 0, west, north, 0],
+        GTModelTypeGeoKey: 2, GTRasterTypeGeoKey: 1,
+        GeographicTypeGeoKey: 4326, GeogCitationGeoKey: 'WGS 84',
+      });
+      saveBlob(new Blob([ab], { type: 'image/tiff' }), `${base}_crop.tif`);
+    }
+    cancelDraw();
+  } catch (err) {
+    setViewStatus('Алдаа: ' + err.message, true);
+  }
+  overlay.classList.remove('on');
+});
 
 // ── Auth ──────────────────────────────────────────────────────────────
 const PASSWORD_HASH = 'f7b56bb4c97a3f962c5db0ba2b76d2939cf11df2da9c3e085fc9ad6d05d878c0';
