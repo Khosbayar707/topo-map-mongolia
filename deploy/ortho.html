@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ортофото зураг</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/georaster"></script>
+  <script src="https://unpkg.com/georaster-layer-for-leaflet"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #1a1a2e; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; }
+
+    header {
+      background: #16213e; border-bottom: 2px solid #0f3460;
+      padding: 8px 16px; display: flex; align-items: center; gap: 12px;
+      flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,.5); z-index: 1000;
+    }
+    header h1 { font-size: 1.05rem; font-weight: 600; color: #e94560; }
+    .subtitle { font-size: 0.7rem; color: #7a8a9a; }
+    .hcontrols { display: flex; gap: 6px; margin-left: auto; align-items: center; }
+    .btn {
+      background: #0f3460; border: 1px solid #e94560; color: #e0e0e0;
+      padding: 5px 11px; border-radius: 4px; cursor: pointer; font-size: 0.76rem;
+      transition: background .15s; white-space: nowrap; text-decoration: none;
+    }
+    .btn:hover, .btn.active { background: #e94560; }
+
+    #main-wrap { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+    #map-wrap { position: relative; flex: 1; overflow: hidden; }
+    #map { width: 100%; height: 100%; background: #0a0a18; }
+
+    #panel {
+      width: 280px; background: #12192e; border-left: 1px solid #1a3060;
+      display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; flex-shrink: 0;
+    }
+    .panel-title {
+      padding: 10px 14px 9px; font-size: 0.8rem; color: #e94560; font-weight: 700;
+      border-bottom: 1px solid #1a3060; position: sticky; top: 0; background: #12192e; z-index: 10;
+    }
+    #panel-close { display: none; float: right; cursor: pointer; color: #7a8a9a; padding: 0 4px; font-size: 0.9rem; }
+    .lsection { border-bottom: 1px solid #0a2040; padding-bottom: 10px; }
+    .lsection-head {
+      padding: 10px 14px 6px; font-size: 0.68rem; color: #7a8a9a;
+      text-transform: uppercase; letter-spacing: .6px;
+    }
+
+    .ortho-item {
+      padding: 8px 14px; display: flex; align-items: center; gap: 8px; cursor: pointer;
+      border-left: 3px solid transparent;
+    }
+    .ortho-item:hover { background: rgba(255,255,255,.04); }
+    .ortho-item.active { border-left-color: #e94560; background: rgba(233,69,96,.08); }
+    .ortho-name { font-size: 0.8rem; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ortho-meta { font-size: 0.65rem; color: #7a8a9a; }
+    .ortho-del { color: #7a8a9a; cursor: pointer; font-size: 0.8rem; display: none; padding: 2px 4px; }
+    .ortho-del:hover { color: #e94560; }
+    body.authed .ortho-del { display: inline; }
+    .no-items { padding: 8px 14px; font-size: 0.74rem; color: #7a8a9a; }
+
+    .slider-row { padding: 4px 14px 6px; display: flex; align-items: center; gap: 8px; }
+    .slider-row span { font-size: 0.66rem; color: #7a8a9a; width: 30px; text-align: right; flex-shrink: 0; }
+    .slider-row input[type=range] { flex: 1; accent-color: #e94560; cursor: pointer; }
+
+    .status-line { padding: 4px 14px 6px; font-size: 0.72rem; color: #7ab0d0; min-height: 1.2em; }
+    .status-line.err { color: #e94560; }
+
+    /* Auth + upload */
+    .auth-box, .upload-box { padding: 4px 14px 8px; }
+    .auth-box input, .upload-box input[type=text] {
+      width: 100%; background: #0f2040; border: 1px solid #1a3060; color: #e0e0e0;
+      border-radius: 4px; padding: 6px 8px; font-size: 0.76rem; margin-bottom: 7px;
+    }
+    .auth-box input:focus, .upload-box input:focus { border-color: #e94560; outline: none; }
+    .btn-full {
+      width: 100%; background: #0f3460; border: 1px solid #e94560; color: #e0e0e0;
+      padding: 7px; border-radius: 4px; cursor: pointer; font-size: 0.76rem;
+    }
+    .btn-full:hover:not(:disabled) { background: #e94560; }
+    .btn-full:disabled { opacity: .4; cursor: default; }
+    .upload-box { display: none; }
+    body.authed .upload-box { display: block; }
+    body.authed .auth-box { display: none; }
+
+    .file-label {
+      display: block; border: 1px dashed #2a4a7a; border-radius: 5px; padding: 12px;
+      text-align: center; font-size: 0.74rem; color: #7a8a9a; cursor: pointer; margin-bottom: 7px;
+    }
+    .file-label:hover { border-color: #e94560; color: #c0d0e0; }
+    .file-label.has-file { border-color: #39d98a; color: #39d98a; border-style: solid; }
+    #tif-input { display: none; }
+
+    .progress { height: 4px; background: #1a3060; border-radius: 2px; margin: 7px 0; display: none; }
+    .progress-bar { height: 100%; background: #e94560; border-radius: 2px; width: 0%; transition: width .2s; }
+
+    .hint { padding: 2px 14px 8px; font-size: 0.66rem; color: #5a6a7a; line-height: 1.5; }
+
+    .loading-overlay {
+      position: absolute; inset: 0; background: rgba(26,26,46,.6);
+      display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 2000;
+    }
+    .loading-overlay.on { display: flex; }
+    .spinner { width: 40px; height: 40px; border: 4px solid #0f3460; border-top-color: #e94560;
+      border-radius: 50%; animation: spin .8s linear infinite; margin-bottom: 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .leaflet-popup-content-wrapper { background: #16213e; color: #e0e0e0; border-radius: 6px; }
+
+    @media (max-width: 768px) {
+      header { padding: 6px 10px; gap: 8px; }
+      header h1 { font-size: 0.88rem; }
+      .subtitle { display: none; }
+      .btn { padding: 6px 8px; font-size: 0.68rem; }
+      #panel {
+        position: fixed; top: 0; right: 0; bottom: 0;
+        width: min(85vw, 320px); z-index: 3000;
+        border-left: 1px solid #1a3060;
+        transition: transform .25s ease; transform: translateX(0);
+        box-shadow: -6px 0 24px rgba(0,0,0,.55);
+      }
+      #panel.collapsed { transform: translateX(100%); }
+      #panel-close { display: inline; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Ортофото зураг</h1>
+    <div class="subtitle">Өндөр нарийвчлалтай агаарын зураг</div>
+  </div>
+  <div class="hcontrols">
+    <button class="btn" id="btn-base">Суурь: Дагуул</button>
+    <button class="btn" id="btn-panel">☰ Файлууд</button>
+    <a class="btn" href="/">← Топо зураг</a>
+  </div>
+</header>
+
+<div id="main-wrap">
+<div id="map-wrap">
+  <div id="map"></div>
+  <div class="loading-overlay" id="loading">
+    <div class="spinner"></div>
+    <div style="font-size:.85rem" id="loading-text">Ачаалж байна...</div>
+  </div>
+</div>
+
+<div id="panel">
+  <div class="panel-title">🛰 Ортофото <span id="panel-close">✕</span></div>
+
+  <div class="lsection">
+    <div class="lsection-head">Файлууд</div>
+    <div id="ortho-list"><div class="no-items">Ачаалж байна…</div></div>
+    <div class="slider-row" id="op-row" style="display:none">
+      <input type="range" id="op-slider" min="0" max="100" value="100" />
+      <span id="op-val">100</span>
+    </div>
+    <div class="status-line" id="view-status"></div>
+  </div>
+
+  <div class="lsection">
+    <div class="lsection-head">Шинэ ортофото нэмэх</div>
+    <div class="auth-box">
+      <input type="password" id="auth-input" placeholder="Нууц үг" autocomplete="current-password" />
+      <button class="btn-full" id="auth-btn">Нэвтрэх</button>
+      <div class="status-line err" id="auth-err" style="display:none;padding:4px 0 0">Нууц үг буруу байна</div>
+    </div>
+    <div class="upload-box">
+      <label class="file-label" id="file-label" for="tif-input">GeoTIFF файл сонгох (.tif)</label>
+      <input type="file" id="tif-input" accept=".tif,.tiff" />
+      <input type="text" id="name-input" placeholder="Нэр (ж: Тувшин 2026)" />
+      <button class="btn-full" id="upload-btn" disabled>⬆ Байршуулах</button>
+      <div class="progress" id="progress"><div class="progress-bar" id="progress-bar"></div></div>
+      <div class="status-line" id="up-status"></div>
+    </div>
+    <div class="hint">
+      💡 WGS84 (EPSG:4326) солбицолтой, COG (Cloud Optimized GeoTIFF) форматтай файл хамгийн хурдан харагдана.
+      QGIS: Raster → Conversion → Translate → COG.
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+// ── Map ───────────────────────────────────────────────────────────────
+const BASES = {
+  sat:  { name: 'Дагуул', layer: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, maxZoom: 22, attribution: '© Esri' }) },
+  osm:  { name: 'OSM',    layer: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { subdomains: 'abc', maxNativeZoom: 19, maxZoom: 22, attribution: '© OpenStreetMap' }) },
+  dark: { name: 'Харанхуй', layer: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxNativeZoom: 20, maxZoom: 22, attribution: '© CARTO' }) },
+};
+const baseOrder = ['sat', 'osm', 'dark'];
+let baseIdx = 0;
+
+const map = L.map('map', { center: [47, 104], zoom: 6, minZoom: 4, maxZoom: 22 });
+BASES.sat.layer.addTo(map);
+
+document.getElementById('btn-base').addEventListener('click', () => {
+  map.removeLayer(BASES[baseOrder[baseIdx]].layer);
+  baseIdx = (baseIdx + 1) % baseOrder.length;
+  const b = BASES[baseOrder[baseIdx]];
+  b.layer.addTo(map);
+  document.getElementById('btn-base').textContent = 'Суурь: ' + b.name;
+});
+
+// Panel drawer (mobile)
+document.getElementById('btn-panel').addEventListener('click', () => {
+  document.getElementById('panel').classList.toggle('collapsed');
+});
+document.getElementById('panel-close').addEventListener('click', () => {
+  document.getElementById('panel').classList.add('collapsed');
+});
+if (window.matchMedia('(max-width: 768px)').matches) {
+  document.getElementById('panel').classList.add('collapsed');
+}
+
+// ── Ortho list + viewer ───────────────────────────────────────────────
+let orthoList = [];
+let curLayer = null;
+let curFile  = null;
+
+function fmtSize(b) {
+  if (!b) return '';
+  return b > 1e9 ? (b/1e9).toFixed(1) + ' GB' : (b/1e6).toFixed(0) + ' MB';
+}
+
+function setViewStatus(msg, err) {
+  const el = document.getElementById('view-status');
+  el.textContent = msg || '';
+  el.className = 'status-line' + (err ? ' err' : '');
+}
+
+async function loadList() {
+  const listEl = document.getElementById('ortho-list');
+  try {
+    orthoList = await fetch('/ortho-files/list.json?t=' + Date.now()).then(r => {
+      if (!r.ok) throw new Error(r.status);
+      return r.json();
+    });
+  } catch {
+    orthoList = [];
+  }
+  if (!orthoList.length) {
+    listEl.innerHTML = '<div class="no-items">Ортофото байхгүй байна</div>';
+    return;
+  }
+  listEl.innerHTML = orthoList.map(o => `
+    <div class="ortho-item${o.file === curFile ? ' active' : ''}" data-file="${o.file}">
+      <span class="ortho-name" title="${o.name}">${o.name}</span>
+      <span class="ortho-meta">${fmtSize(o.size)}</span>
+      <span class="ortho-del" data-file="${o.file}" title="Устгах">✕</span>
+    </div>`).join('');
+
+  listEl.querySelectorAll('.ortho-item').forEach(item => {
+    item.addEventListener('click', () => viewOrtho(item.dataset.file));
+  });
+  listEl.querySelectorAll('.ortho-del').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); deleteOrtho(btn.dataset.file); });
+  });
+}
+
+async function viewOrtho(file) {
+  if (file === curFile) return;
+  const overlay = document.getElementById('loading');
+  overlay.classList.add('on');
+  document.getElementById('loading-text').textContent = 'Ортофото ачаалж байна…';
+  setViewStatus('');
+  try {
+    const georaster = await parseGeoraster(location.origin + '/ortho-files/' + encodeURIComponent(file));
+    if (curLayer) { map.removeLayer(curLayer); curLayer = null; }
+    const op = document.getElementById('op-slider').value / 100;
+    curLayer = new GeoRasterLayer({ georaster, opacity: op, resolution: 128 });
+    curLayer.addTo(map);
+    curFile = file;
+    map.fitBounds(curLayer.getBounds());
+    document.getElementById('op-row').style.display = '';
+    document.querySelectorAll('.ortho-item').forEach(i =>
+      i.classList.toggle('active', i.dataset.file === file));
+  } catch (err) {
+    setViewStatus('Алдаа: ' + err.message, true);
+  }
+  overlay.classList.remove('on');
+}
+
+document.getElementById('op-slider').addEventListener('input', e => {
+  document.getElementById('op-val').textContent = e.target.value;
+  if (curLayer) curLayer.setOpacity(e.target.value / 100);
+});
+
+async function deleteOrtho(file) {
+  const o = orthoList.find(x => x.file === file);
+  if (!confirm(`"${o ? o.name : file}"-г устгах уу?`)) return;
+  const res = await fetch('/api/ortho/delete', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ file }),
+  }).then(r => r.json()).catch(e => ({ error: e.message }));
+  if (res.error) { setViewStatus('Устгаж чадсангүй: ' + res.error, true); return; }
+  if (file === curFile && curLayer) {
+    map.removeLayer(curLayer); curLayer = null; curFile = null;
+    document.getElementById('op-row').style.display = 'none';
+  }
+  loadList();
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────
+const PASSWORD_HASH = 'f7b56bb4c97a3f962c5db0ba2b76d2939cf11df2da9c3e085fc9ad6d05d878c0';
+
+async function sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function checkAuth() {
+  const hash = await sha256(document.getElementById('auth-input').value);
+  if (hash === PASSWORD_HASH) {
+    document.body.classList.add('authed');
+  } else {
+    const err = document.getElementById('auth-err');
+    err.style.display = 'block';
+    document.getElementById('auth-input').value = '';
+    setTimeout(() => { err.style.display = 'none'; }, 2500);
+  }
+}
+document.getElementById('auth-btn').addEventListener('click', checkAuth);
+document.getElementById('auth-input').addEventListener('keydown', e => { if (e.key === 'Enter') checkAuth(); });
+
+// ── Upload (multipart, 50MB chunks) ───────────────────────────────────
+const CHUNK = 50 * 1024 * 1024;
+let selFile = null;
+
+document.getElementById('tif-input').addEventListener('change', e => {
+  selFile = e.target.files[0] || null;
+  const label = document.getElementById('file-label');
+  if (selFile) {
+    label.textContent = `${selFile.name} (${fmtSize(selFile.size)})`;
+    label.classList.add('has-file');
+    if (!document.getElementById('name-input').value) {
+      document.getElementById('name-input').value = selFile.name.replace(/\.tiff?$/i, '');
+    }
+  } else {
+    label.textContent = 'GeoTIFF файл сонгох (.tif)';
+    label.classList.remove('has-file');
+  }
+  updateUploadBtn();
+});
+document.getElementById('name-input').addEventListener('input', updateUploadBtn);
+
+function updateUploadBtn() {
+  document.getElementById('upload-btn').disabled =
+    !selFile || !document.getElementById('name-input').value.trim();
+}
+
+function setUpStatus(msg, err) {
+  const el = document.getElementById('up-status');
+  el.textContent = msg || '';
+  el.className = 'status-line' + (err ? ' err' : '');
+}
+
+function putChunk(url, blob, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded); };
+    xhr.onload = () => {
+      try {
+        const j = JSON.parse(xhr.responseText);
+        if (xhr.status >= 200 && xhr.status < 300 && !j.error) resolve(j);
+        else reject(new Error(j.error || ('HTTP ' + xhr.status)));
+      } catch { reject(new Error('HTTP ' + xhr.status)); }
+    };
+    xhr.onerror = () => reject(new Error('Сүлжээний алдаа'));
+    xhr.send(blob);
+  });
+}
+
+document.getElementById('upload-btn').addEventListener('click', async () => {
+  if (!selFile) return;
+  const name = document.getElementById('name-input').value.trim();
+  const btn = document.getElementById('upload-btn');
+  const bar = document.getElementById('progress-bar');
+  btn.disabled = true;
+  document.getElementById('progress').style.display = 'block';
+  bar.style.width = '0%';
+
+  try {
+    setUpStatus('Upload эхэлж байна…');
+    const create = await fetch('/api/ortho/create', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }).then(r => r.json());
+    if (create.error) throw new Error(create.error);
+
+    const total = selFile.size;
+    const nParts = Math.ceil(total / CHUNK);
+    const parts = [];
+    for (let i = 0; i < nParts; i++) {
+      const blob = selFile.slice(i * CHUNK, Math.min((i + 1) * CHUNK, total));
+      setUpStatus(`Хэсэг ${i + 1}/${nParts} илгээж байна…`);
+      const done = i * CHUNK;
+      const part = await putChunk(
+        `/api/ortho/part?key=${encodeURIComponent(create.key)}&uploadId=${encodeURIComponent(create.uploadId)}&partNumber=${i + 1}`,
+        blob,
+        loaded => { bar.style.width = Math.round((done + loaded) / total * 100) + '%'; }
+      );
+      parts.push({ partNumber: part.partNumber, etag: part.etag });
+    }
+
+    setUpStatus('Дуусгаж байна…');
+    const fin = await fetch('/api/ortho/complete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: create.key, uploadId: create.uploadId, parts, name, file: create.file, size: total }),
+    }).then(r => r.json());
+    if (fin.error) throw new Error(fin.error);
+
+    bar.style.width = '100%';
+    setUpStatus('✅ Амжилттай байршууллаа');
+    selFile = null;
+    document.getElementById('tif-input').value = '';
+    document.getElementById('file-label').textContent = 'GeoTIFF файл сонгох (.tif)';
+    document.getElementById('file-label').classList.remove('has-file');
+    document.getElementById('name-input').value = '';
+    loadList();
+  } catch (err) {
+    setUpStatus('Алдаа: ' + err.message, true);
+  }
+  updateUploadBtn();
+});
+
+loadList();
+</script>
+</body>
+</html>
