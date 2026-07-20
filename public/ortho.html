@@ -405,13 +405,37 @@ map.on('mouseup', e => {
   showExportDlg();
 });
 
-// Сонгосон талбайг georaster-ийн пикселийн цонх руу хөрвүүлнэ
+// Сонгосон талбайг харагдаж буй давхаргын хилээс пикселийн цонх руу хөрвүүлнэ.
+// Metadata биш curLayer.getBounds() ашигласнаар дэлгэц дээр харагдаж буй
+// байрлалтай үргэлж таарна.
+function rasterSize() {
+  const g = curGeoraster;
+  const W = g.width  || Math.round((g.xmax - g.xmin) / g.pixelWidth);
+  const H = g.height || Math.round((g.ymax - g.ymin) / g.pixelHeight);
+  return { W, H };
+}
+
 function pixelWindow() {
-  const g = curGeoraster, b = drawRect.getBounds();
-  const x0 = Math.max(0, Math.floor((b.getWest()  - g.xmin) / g.pixelWidth));
-  const x1 = Math.min(g.width,  Math.ceil((b.getEast()  - g.xmin) / g.pixelWidth));
-  const y0 = Math.max(0, Math.floor((g.ymax - b.getNorth()) / g.pixelHeight));
-  const y1 = Math.min(g.height, Math.ceil((g.ymax - b.getSouth()) / g.pixelHeight));
+  const lb = curLayer.getBounds();
+  const sb = drawRect.getBounds();
+  const { W, H } = rasterSize();
+  const west  = Math.max(sb.getWest(),  lb.getWest());
+  const east  = Math.min(sb.getEast(),  lb.getEast());
+  const south = Math.max(sb.getSouth(), lb.getSouth());
+  const north = Math.min(sb.getNorth(), lb.getNorth());
+  if (west >= east || south >= north) {
+    console.log('pixelWindow: intersection хоосон', {
+      sel: sb.toBBoxString(), layer: lb.toBBoxString(),
+      meta: { xmin: curGeoraster.xmin, xmax: curGeoraster.xmax, ymin: curGeoraster.ymin, ymax: curGeoraster.ymax, W, H },
+    });
+    return { w: 0, h: 0 };
+  }
+  const fx = v => (v - lb.getWest()) / (lb.getEast() - lb.getWest()) * W;
+  const fy = v => (lb.getNorth() - v) / (lb.getNorth() - lb.getSouth()) * H;
+  const x0 = Math.max(0, Math.floor(fx(west)));
+  const x1 = Math.min(W, Math.ceil(fx(east)));
+  const y0 = Math.max(0, Math.floor(fy(north)));
+  const y1 = Math.min(H, Math.ceil(fy(south)));
   return { x0, x1, y0, y1, w: x1 - x0, h: y1 - y0 };
 }
 
@@ -475,11 +499,15 @@ document.getElementById('export-go').addEventListener('click', async () => {
       ctx.putImageData(img, 0, 0);
       canvas.toBlob(blob => saveBlob(blob, `${base}_crop.png`), 'image/png');
     } else {
-      // GeoTIFF — солбицолын мэдээлэлтэй
-      const west  = g.xmin + win.x0 * g.pixelWidth;
-      const north = g.ymax - win.y0 * g.pixelHeight;
-      const pw = (win.w * g.pixelWidth)  / outW;
-      const ph = (win.h * g.pixelHeight) / outH;
+      // GeoTIFF — солбицолын мэдээлэлтэй (давхаргын хилээс тооцно)
+      const lb = curLayer.getBounds();
+      const { W, H } = rasterSize();
+      const degW = (lb.getEast() - lb.getWest()) / W;
+      const degH = (lb.getNorth() - lb.getSouth()) / H;
+      const west  = lb.getWest()  + win.x0 * degW;
+      const north = lb.getNorth() - win.y0 * degH;
+      const pw = (win.w * degW) / outW;
+      const ph = (win.h * degH) / outH;
       const rgb = values.slice(0, Math.min(3, nBands));
       const ab = GeoTIFF.writeArrayBuffer(rgb, {
         height: outH, width: outW,
