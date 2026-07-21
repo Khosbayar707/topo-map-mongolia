@@ -194,6 +194,33 @@
     .spinner { width: 46px; height: 46px; border: 4px solid #0f3460; border-top-color: #e94560;
       border-radius: 50%; animation: spin .8s linear infinite; margin-bottom: 13px; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Mobile ─────────────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      header { padding: 6px 10px; gap: 8px; }
+      header h1 { font-size: 0.88rem; }
+      .subtitle { display: none; }
+      .btn { padding: 6px 8px; font-size: 0.68rem; }
+      #btn-fit { display: none; }
+
+      /* Давхаргын самбар — баруунаас гулсаж гардаг drawer */
+      #layer-panel {
+        position: fixed; top: 0; right: 0; bottom: 0;
+        width: min(85vw, 320px); z-index: 3000;
+        border-left: 1px solid #1a3060;
+        transition: transform .25s ease; transform: translateX(0);
+        box-shadow: -6px 0 24px rgba(0,0,0,.55);
+      }
+      #layer-panel.collapsed {
+        width: min(85vw, 320px); border-left: 1px solid #1a3060;
+        transform: translateX(100%);
+      }
+      #panel-close { display: inline !important; }
+
+      #sb-pos-item, #sb-size, #sb-bbox { display: none !important; }
+      .leaflet-popup-content { font-size: 0.72rem; max-width: 240px; }
+      .basemap-thumb { height: 44px; }
+    }
   </style>
 </head>
 <body>
@@ -221,7 +248,7 @@
 </div>
 
 <div id="layer-panel">
-  <div class="panel-title">☰ Давхаргууд</div>
+  <div class="panel-title">☰ Давхаргууд <span id="panel-close" style="display:none;float:right;cursor:pointer;color:#7a8a9a;padding:0 4px;font-size:0.9rem">✕</span></div>
 
   <div class="lsection">
     <div class="lsection-head">Суурь газрын зураг</div>
@@ -271,20 +298,6 @@
   </div>
 
   <div class="lsection">
-    <div class="lsection-head">Ортофото зураг</div>
-    <div class="base-row">
-      <input type="checkbox" id="chk-ortho" />
-      <div class="swatch" style="background:linear-gradient(135deg,#4a7c59,#8fa68e)"></div>
-      <label for="chk-ortho">Ортофото</label>
-    </div>
-    <div class="slider-row" id="ortho-slider-row" style="display:none">
-      <span id="ortho-op-val">80</span>
-      <input type="range" id="opacity-ortho" min="0" max="100" value="80" />
-    </div>
-    <div id="ortho-status" style="font-size:0.7rem;color:#7a8a9a;padding:2px 14px 4px"></div>
-  </div>
-
-  <div class="lsection">
     <div class="lsection-head">Shapefile давхаргууд</div>
     <div id="shp-list"></div>
   </div>
@@ -295,14 +308,15 @@
 
 <div id="statusbar">
   <div class="sb-item"><div class="sb-dot"></div>Zoom <b id="sb-zoom">—</b></div>
-  <div class="sb-item wide">📍 <b id="sb-pos">—</b></div>
+  <div class="sb-item wide" id="sb-pos-item">📍 <b id="sb-pos">—</b></div>
   <div class="sb-item" id="sb-size" style="display:none">🗂 <b id="sb-imgsize">—</b></div>
   <div class="sb-item" id="sb-bbox" style="display:none"><b id="sb-bboxval">—</b></div>
 </div>
 
 <script>
 // ── Config ────────────────────────────────────────────────────────────
-const R2 = 'https://pub-2d7bdb113e09406eab77dc06705c4461.r2.dev';
+// R2-ийн шууд URL-ийг ашиглахгүй — Referer шалгадаг Pages Function proxy-гоор дамжуулна
+const R2 = '';
 
 const BASEMAPS = {
   dark:      { url: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', opts: { subdomains:'abcd', maxZoom:20, attribution:'© CARTO' } },
@@ -331,6 +345,13 @@ const topoLayer = L.tileLayer(`${R2}/tiles/{z}/{x}/{y}.png`, {
 document.getElementById('btn-layers').addEventListener('click', () => {
   document.getElementById('layer-panel').classList.toggle('collapsed');
 });
+document.getElementById('panel-close').addEventListener('click', () => {
+  document.getElementById('layer-panel').classList.add('collapsed');
+});
+// Mobile: самбар анхнаасаа хаалттай
+if (window.matchMedia('(max-width: 768px)').matches) {
+  document.getElementById('layer-panel').classList.add('collapsed');
+}
 
 // ── Base map switcher ─────────────────────────────────────────────────
 function switchBase(id) {
@@ -370,34 +391,6 @@ document.getElementById('btn-fit').addEventListener('click', () => {
   map.fitBounds([[INFO.south, INFO.west],[INFO.north, INFO.east]], { maxZoom:8, animate:false, padding:[10,10] });
 });
 
-
-// ── Ортофото (XYZ tiles from R2) ─────────────────────────────────────
-const ORTHO_TILE_URL = 'https://pub-2d7bdb113e09406eab77dc06705c4461.r2.dev/orthophoto/tiles/{z}/{x}/{y}.png';
-const chkOrtho      = document.getElementById('chk-ortho');
-const orthoSliderRow = document.getElementById('ortho-slider-row');
-const orthoOpVal    = document.getElementById('ortho-op-val');
-const orthoOpSlider = document.getElementById('opacity-ortho');
-
-const orthoLayer = L.tileLayer(ORTHO_TILE_URL, {
-  minZoom: 14, maxZoom: 19,
-  opacity: 0.8,
-  tms: true,
-  attribution: 'Ортофото © Тувшин',
-});
-
-chkOrtho.addEventListener('change', () => {
-  if (chkOrtho.checked) {
-    orthoLayer.addTo(map);
-    orthoSliderRow.style.display = '';
-  } else {
-    map.removeLayer(orthoLayer);
-  }
-});
-
-orthoOpSlider.addEventListener('input', () => {
-  orthoOpVal.textContent = orthoOpSlider.value;
-  orthoLayer.setOpacity(orthoOpSlider.value / 100);
-});
 
 // ── Default colors ────────────────────────────────────────────────────
 const COLORS = ['#e94560','#00d4ff','#39d98a','#ffb800','#b47fff','#ff6b35','#00e5c0','#ff4dff'];
