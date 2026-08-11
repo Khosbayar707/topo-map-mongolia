@@ -3,30 +3,30 @@
  * Browser-аас ирсэн GeoJSON-г R2-д хадгалж, layers.json шинэчилнэ.
  */
 
-const CORS = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
+import { assertAdmin, corsHeaders, optionsResponse } from './_auth.js';
 
-export async function onRequestOptions() {
-  return new Response(null, { headers: CORS });
+export async function onRequestOptions({ request }) {
+  return optionsResponse(request, 'POST, OPTIONS');
 }
 
 export async function onRequestPost(context) {
   const { request, env } = context;
+  const cors = corsHeaders(request, 'POST, OPTIONS');
+
+  const denied = assertAdmin(request, env);
+  if (denied) return denied;
 
   if (!env.BUCKET) {
-    return Response.json({ error: 'R2 BUCKET binding тохируулаагүй байна' }, { status: 500, headers: CORS });
+    return Response.json({ error: 'R2 BUCKET binding тохируулаагүй байна' }, { status: 500, headers: cors });
   }
 
   let body;
   try { body = await request.json(); }
-  catch { return Response.json({ error: 'JSON биш payload' }, { status: 400, headers: CORS }); }
+  catch { return Response.json({ error: 'JSON биш payload' }, { status: 400, headers: cors }); }
 
   const { name, geojson } = body;
   if (!name || !geojson) {
-    return Response.json({ error: 'name болон geojson шаардлагатай' }, { status: 400, headers: CORS });
+    return Response.json({ error: 'name болон geojson шаардлагатай' }, { status: 400, headers: cors });
   }
 
   // ASCII-safe filename — Кирилл/зай URL-д асуудал үүсгэхгүйн тулд
@@ -67,5 +67,5 @@ export async function onRequestPost(context) {
   return Response.json({
     success: true, name, key: geoKey,
     features: featCount, totalLayers: layers.length,
-  }, { headers: CORS });
+  }, { headers: cors });
 }

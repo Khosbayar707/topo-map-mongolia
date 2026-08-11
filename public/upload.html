@@ -194,10 +194,9 @@
 </div>
 
 <script>
-// ── Нууц үг тохируулах (SHA-256 hash) ───────────────────────────────
-// Нууц үгийг өөрчлөхдөө: https://emn178.github.io/online-tools/sha256.html
-// Хийж авсан hash-г доор тавина уу
-// Анхдагч нууц үг: topo2024
+// ── Нууц үг: SHA-256 hash (ADMIN.md-г үзнэ үү) ───────────────────────
+// Нууц үг = Cloudflare ADMIN_SECRET. Hash-ыг солих:
+//   echo -n 'YOUR_SECRET' | shasum -a 256
 const PASSWORD_HASH = 'f7b56bb4c97a3f962c5db0ba2b76d2939cf11df2da9c3e085fc9ad6d05d878c0';
 
 async function sha256(str) {
@@ -207,14 +206,34 @@ async function sha256(str) {
 
 // ── Auth ─────────────────────────────────────────────────────────────
 let authed = false;
+let adminSecret = '';
+
+function authHeaders(extra) {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + adminSecret,
+    ...(extra || {}),
+  };
+}
+
+function requireReauth(msg) {
+  adminSecret = '';
+  authed = false;
+  document.getElementById('upload-ui').style.display = 'none';
+  document.getElementById('auth-gate').style.display = 'block';
+  document.getElementById('auth-input').value = '';
+  setStatus(msg || 'Нэвтрэлт хүчингүй. Дахин нэвтэрнэ үү.', 'err');
+}
 
 async function checkAuth() {
   const val = document.getElementById('auth-input').value;
   const hash = await sha256(val);
   if (hash === PASSWORD_HASH) {
     authed = true;
+    adminSecret = val;
     document.getElementById('auth-gate').style.display = 'none';
     document.getElementById('upload-ui').style.display = 'block';
+    document.getElementById('auth-input').value = '';
     loadLayerList();
   } else {
     const err = document.getElementById('auth-err');
@@ -320,10 +339,11 @@ document.getElementById('btn-upload').addEventListener('click', async () => {
 
     const res = await fetch('/api/upload', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({ name: layerName, geojson }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) { requireReauth(); return; }
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
 
     setProgress(100);
@@ -359,13 +379,18 @@ async function loadLayerList() {
         if (!confirm(`"${layer.name}" давхаргыг устгах уу?`)) return;
         btn.disabled = true; btn.textContent = '...';
         try {
-          await fetch('/api/delete', {
+          const res = await fetch('/api/delete', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: authHeaders(),
             body: JSON.stringify({ name: layer.name, file: layer.file })
           });
+          if (res.status === 401) { requireReauth(); return; }
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || ('HTTP ' + res.status));
+          }
           loadLayerList();
-        } catch { btn.disabled = false; btn.textContent = 'Устгах'; alert('Устгаж чадсангүй'); }
+        } catch (e) { btn.disabled = false; btn.textContent = 'Устгах'; alert('Устгаж чадсангүй: ' + (e.message || '')); }
       });
     });
   } catch {
