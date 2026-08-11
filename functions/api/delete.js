@@ -3,34 +3,38 @@
  * R2-с GeoJSON файл болон layers.json-с бичлэг устгана.
  */
 
-const CORS = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
+import { assertAdmin, corsHeaders, optionsResponse } from './_auth.js';
 
-export async function onRequestOptions() {
-  return new Response(null, { headers: CORS });
+const SAFE_GEOJSON = /^[a-zA-Z0-9._-]+\.geojson$/;
+
+export async function onRequestOptions({ request }) {
+  return optionsResponse(request, 'POST, OPTIONS');
 }
 
 export async function onRequestPost(context) {
   const { request, env } = context;
+  const cors = corsHeaders(request, 'POST, OPTIONS');
+
+  const denied = assertAdmin(request, env);
+  if (denied) return denied;
 
   if (!env.BUCKET) {
-    return Response.json({ error: 'R2 BUCKET binding тохируулаагүй байна' }, { status: 500, headers: CORS });
+    return Response.json({ error: 'R2 BUCKET binding тохируулаагүй байна' }, { status: 500, headers: cors });
   }
 
   let body;
   try { body = await request.json(); }
-  catch { return Response.json({ error: 'JSON биш payload' }, { status: 400, headers: CORS }); }
+  catch { return Response.json({ error: 'JSON биш payload' }, { status: 400, headers: cors }); }
 
   const { name, file } = body;
   if (!name && !file) {
-    return Response.json({ error: 'name эсвэл file шаардлагатай' }, { status: 400, headers: CORS });
+    return Response.json({ error: 'name эсвэл file шаардлагатай' }, { status: 400, headers: cors });
   }
 
-  // R2-с GeoJSON файл устгах
   if (file) {
+    if (typeof file !== 'string' || file.includes('/') || file.includes('..') || !SAFE_GEOJSON.test(file)) {
+      return Response.json({ error: 'Зөв file нэр шаардлагатай' }, { status: 400, headers: cors });
+    }
     try { await env.BUCKET.delete(`geojson/${file}`); } catch {}
   }
 
@@ -52,5 +56,5 @@ export async function onRequestPost(context) {
     success: true,
     removed: before - layers.length,
     totalLayers: layers.length,
-  }, { headers: CORS });
+  }, { headers: cors });
 }

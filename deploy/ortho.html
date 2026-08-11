@@ -345,11 +345,14 @@ document.getElementById('op-slider').addEventListener('input', e => {
 async function deleteOrtho(file) {
   const o = orthoList.find(x => x.file === file);
   if (!confirm(`"${o ? o.name : file}"-г устгах уу?`)) return;
+  if (!adminSecret) { requireReauth(); return; }
   const res = await fetch('/api/ortho/delete', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: authHeaders(),
     body: JSON.stringify({ file }),
-  }).then(r => r.json()).catch(e => ({ error: e.message }));
-  if (res.error) { setViewStatus('Устгаж чадсангүй: ' + res.error, true); return; }
+  });
+  if (res.status === 401) { requireReauth(); return; }
+  const data = await res.json().catch(e => ({ error: e.message }));
+  if (data.error) { setViewStatus('Устгаж чадсангүй: ' + data.error, true); return; }
   if (file === curFile && curLayer) {
     map.removeLayer(curLayer); curLayer = null; curFile = null; curGeoraster = null;
     document.getElementById('op-row').style.display = 'none';
@@ -559,7 +562,30 @@ document.getElementById('export-go').addEventListener('click', async () => {
 });
 
 // ── Auth ──────────────────────────────────────────────────────────────
+// Нууц үг = Cloudflare ADMIN_SECRET. Hash солих: echo -n 'YOUR_SECRET' | shasum -a 256
 const PASSWORD_HASH = 'f7b56bb4c97a3f962c5db0ba2b76d2939cf11df2da9c3e085fc9ad6d05d878c0';
+
+let adminSecret = '';
+
+function authHeaders(extra) {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + adminSecret,
+    ...(extra || {}),
+  };
+}
+
+function requireReauth(msg) {
+  adminSecret = '';
+  document.body.classList.remove('authed');
+  document.getElementById('auth-input').value = '';
+  setUpStatus(msg || 'Нэвтрэлт хүчингүй. Дахин нэвтэрнэ үү.', true);
+  const err = document.getElementById('auth-err');
+  if (err) {
+    err.textContent = msg || 'Нэвтрэлт хүчингүй. Дахин нэвтэрнэ үү.';
+    err.style.display = 'block';
+  }
+}
 
 async function sha256(str) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
@@ -567,9 +593,12 @@ async function sha256(str) {
 }
 
 async function checkAuth() {
-  const hash = await sha256(document.getElementById('auth-input').value);
+  const val = document.getElementById('auth-input').value;
+  const hash = await sha256(val);
   if (hash === PASSWORD_HASH) {
+    adminSecret = val;
     document.body.classList.add('authed');
+    document.getElementById('auth-input').value = '';
   } else {
     const err = document.getElementById('auth-err');
     err.style.display = 'block';
@@ -616,8 +645,13 @@ function putChunk(url, blob, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', url);
+    xhr.setRequestHeader('Authorization', 'Bearer ' + adminSecret);
     xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded); };
     xhr.onload = () => {
+      if (xhr.status === 401) {
+        reject(Object.assign(new Error('Unauthorized'), { status: 401 }));
+        return;
+      }
       try {
         const j = JSON.parse(xhr.responseText);
         if (xhr.status >= 200 && xhr.status < 300 && !j.error) resolve(j);
@@ -631,6 +665,7 @@ function putChunk(url, blob, onProgress) {
 
 document.getElementById('upload-btn').addEventListener('click', async () => {
   if (!selFile) return;
+  if (!adminSecret) { requireReauth(); return; }
   const name = document.getElementById('name-input').value.trim();
   const btn = document.getElementById('upload-btn');
   const bar = document.getElementById('progress-bar');
@@ -640,10 +675,12 @@ document.getElementById('upload-btn').addEventListener('click', async () => {
 
   try {
     setUpStatus('Upload эхэлж байна…');
-    const create = await fetch('/api/ortho/create', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+    const createRes = await fetch('/api/ortho/create', {
+      method: 'POST', headers: authHeaders(),
       body: JSON.stringify({ name }),
-    }).then(r => r.json());
+    });
+    if (createRes.status === 401) { requireReauth(); return; }
+    const create = await createRes.json();
     if (create.error) throw new Error(create.error);
 
     const total = selFile.size;
@@ -662,10 +699,12 @@ document.getElementById('upload-btn').addEventListener('click', async () => {
     }
 
     setUpStatus('Дуусгаж байна…');
-    const fin = await fetch('/api/ortho/complete', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+    const finRes = await fetch('/api/ortho/complete', {
+      method: 'POST', headers: authHeaders(),
       body: JSON.stringify({ key: create.key, uploadId: create.uploadId, parts, name, file: create.file, size: total }),
-    }).then(r => r.json());
+    });
+    if (finRes.status === 401) { requireReauth(); return; }
+    const fin = await finRes.json();
     if (fin.error) throw new Error(fin.error);
 
     bar.style.width = '100%';
@@ -677,7 +716,8 @@ document.getElementById('upload-btn').addEventListener('click', async () => {
     document.getElementById('name-input').value = '';
     loadList();
   } catch (err) {
-    setUpStatus('Алдаа: ' + err.message, true);
+    if (err.status === 401) requireReauth();
+    else setUpStatus('Алдаа: ' + err.message, true);
   }
   updateUploadBtn();
 });
